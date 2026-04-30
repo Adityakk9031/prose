@@ -14,6 +14,30 @@ This package is release prep. The npm package and GitHub release tarball used by
 `install.sh` are intended install paths, but these docs do not assume either has
 been published yet. For now, use a local checkout or a private release source.
 
+## Release Workflow
+
+CLI releases are published by the manual `CLI Publish` GitHub Actions workflow
+after the version bump has landed on `main`. The workflow is intentionally
+manual-only and checks that:
+
+- the actor and triggering actor are `irl-dan` or `josemontesdeoca`;
+- the run is executing from `main`;
+- the requested version matches `cli/package.json` and `install.sh`;
+- the Git tag, GitHub release, and npm package version do not already exist.
+
+`dry_run` defaults to `true`. A dry run builds and verifies the npm package and
+the Linux/macOS release tarballs without publishing. For a real release, run the
+workflow with `dry_run` set to `false`; the publish job then waits on the
+GitHub `release` environment before creating the public release artifacts.
+
+One-time repository setup:
+
+- Create a GitHub environment named `release` with required reviewers
+  `irl-dan` and `josemontesdeoca`.
+- Configure npm trusted publishing for `@openprose/prose-cli` with repository
+  `openprose/prose`, workflow `.github/workflows/cli-publish.yml`, and
+  environment `release`.
+
 ## Requirements
 
 - Node.js 18 or newer
