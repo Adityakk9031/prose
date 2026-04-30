@@ -132,7 +132,9 @@ describe("codex-sdk harness", () => {
 							expect(prompt).toBe("prose run inspector.md");
 							expect(turnOptions?.signal).toBe(signal);
 							return {
-								events: events([{ type: "item.completed", item: { type: "agent_message", text: "sdk output" } }]),
+								events: events([
+									{ type: "item.completed", item: { id: "item-1", type: "agent_message", text: "sdk output" } },
+								]),
 							};
 						},
 					};

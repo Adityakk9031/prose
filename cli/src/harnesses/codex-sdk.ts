@@ -54,12 +54,12 @@ function writeCodexEvent(
 ): number {
 	switch (event.type) {
 		case "item.completed":
-			return writeCodexItem((event as { item: CodexThreadItem }).item, stdout, stderr);
+			return writeCodexItem(event.item, stdout, stderr);
 		case "turn.failed":
-			writeLine(stderr, String((event as { error: { message: string } }).error.message));
+			writeLine(stderr, event.error.message);
 			return 1;
 		case "error":
-			writeLine(stderr, String((event as { message: string }).message));
+			writeLine(stderr, event.message);
 			return 1;
 		default:
 			return 0;
@@ -73,16 +73,16 @@ function writeCodexItem(
 ): number {
 	switch (item.type) {
 		case "agent_message":
-			writeLine(stdout, String(item.text));
+			writeLine(stdout, item.text);
 			return 0;
 		case "command_execution":
 			if (item.status === "failed") {
-				writeLine(stderr, String(item.aggregated_output || `Command failed: ${item.command}`));
+				writeLine(stderr, item.aggregated_output || `Command failed: ${item.command}`);
 				return typeof item.exit_code === "number" ? normalizeExitCode(item.exit_code) : 1;
 			}
 			return 0;
 		case "error":
-			writeLine(stderr, String(item.message));
+			writeLine(stderr, item.message);
 			return 1;
 		default:
 			return 0;

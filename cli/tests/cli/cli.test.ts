@@ -47,31 +47,29 @@ describe("Oclif entrypoint helpers", () => {
 	});
 
 	it("normalizes pre-command harness flags for Oclif dispatch", () => {
-		const env: Record<string, string | undefined> = {};
-
-		expect(normalizeEntrypointArgv(["--harness", "mock", "run", "flow.md"], env)).toEqual(["run", "flow.md"]);
-		expect(env.PROSE_CLI_HARNESS).toBe("mock");
+		expect(normalizeEntrypointArgv(["--harness", "mock", "run", "flow.md"])).toEqual([
+			"run",
+			"--harness",
+			"mock",
+			"flow.md",
+		]);
 	});
 
 	it("does not consume literal harness-looking args after --", () => {
-		const env: Record<string, string | undefined> = {};
-
-		expect(normalizeEntrypointArgv(["run", "flow.md", "--", "--harness", "literal"], env)).toEqual([
+		expect(normalizeEntrypointArgv(["run", "flow.md", "--", "--harness", "literal"])).toEqual([
 			"run",
 			"flow.md",
 			"--",
 			"--harness",
 			"literal",
 		]);
-		expect(env.PROSE_CLI_HARNESS).toBeUndefined();
 	});
 });
 
 describe("harness argument splitting", () => {
-	it("defaults to codex-sdk and honors env overrides", () => {
+	it("defaults to codex-sdk and honors the public env override", () => {
 		expect(splitHarnessArgs(["flow.md"], {}).harness).toBe("codex-sdk");
 		expect(splitHarnessArgs(["flow.md"], { PROSE_HARNESS: "claude-sdk" }).harness).toBe("claude-sdk");
-		expect(splitHarnessArgs(["flow.md"], { OPENPROSE_HARNESS: "claude" }).harness).toBe("claude");
 	});
 
 	it("removes command-local harness flags while preserving run inputs", () => {
@@ -85,7 +83,7 @@ describe("harness argument splitting", () => {
 	});
 
 	it("keeps --harness literal after --", () => {
-		const parsed = splitHarnessArgs(["./flow.md", "--", "--harness", "literal"], { PROSE_CLI_HARNESS: "mock" });
+		const parsed = splitHarnessArgs(["./flow.md", "--", "--harness", "literal"], { PROSE_HARNESS: "mock" });
 
 		expect(parsed.harness).toBe("mock");
 		expect(parsed.args).toEqual(["./flow.md", "--", "--harness", "literal"]);

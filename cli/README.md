@@ -68,8 +68,7 @@ to the release tarball.
 - `claude` runs `claude -p <prompt>` and streams the Claude CLI process output.
 - `mock` echoes prompts for tests and local smoke checks.
 
-Select a harness with `--harness <name>`, `PROSE_HARNESS`, or
-`OPENPROSE_HARNESS`.
+Select a harness with `--harness <name>` or `PROSE_HARNESS`.
 
 ## Skill Setup
 
@@ -100,10 +99,16 @@ prose doctor --harness claude-sdk --install
 - `SIGINT` and `SIGTERM` are propagated through the active harness.
 - Arguments after `--` are forwarded literally, including `--harness`.
 
+The tarball installer is intentionally a Node.js installer: the CLI package is
+JavaScript, so the installed shim executes Node.js 18 or newer. The script
+verifies release checksums by default, rejects unsafe tar paths, symlinks,
+hardlinks, and special files, and writes the final shim atomically.
+
 ## Usage
 
-The shell command mirrors the agent-session command language described in the
-root docs:
+Forwarding commands mirror the agent-session command language described in the
+root docs. `prose help` is local CLI help; use `prose --help` or
+`prose help <command>` to inspect shell usage.
 
 ```bash
 prose run programs/reviewer.md

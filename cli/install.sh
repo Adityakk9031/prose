@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+# Installs the Node-based Prose CLI from a verified release tarball.
 DEFAULT_VERSION="0.1.0"
 DEFAULT_REPO_URL="https://github.com/openprose/prose"
 

@@ -1,7 +1,7 @@
-import { Command, Flags } from "@oclif/core";
+import { Command } from "@oclif/core";
 import type { CommandName } from "../prose/index.js";
 import { canonicalPrompt, CommandModelError, usageFor } from "../prose/index.js";
-import { createHarness, HARNESS_NAMES, type HarnessName } from "../harnesses/index.js";
+import { createHarness, type HarnessName } from "../harnesses/index.js";
 import type { Harness, WritableStreamLike } from "../harnesses/types.js";
 import { ensureOpenProseSkill } from "../skills/open-prose.js";
 
@@ -27,16 +27,15 @@ export interface ForwardRunOptions {
 	skillPreflight?: SkillPreflight | false;
 }
 
-export const harnessFlag = Flags.string({
-	description: "Agent harness to run the OpenProse command.",
-	options: [...HARNESS_NAMES],
-});
+export interface ForwardCommandDefinition {
+	command: CommandName;
+	examples?: string[];
+	summary: string;
+	usage: string;
+}
 
 export abstract class ProseForwardCommand extends Command {
 	static strict = false;
-	static flags = {
-		harness: harnessFlag,
-	};
 
 	protected abstract proseCommand: CommandName;
 
@@ -69,6 +68,16 @@ export abstract class ProseForwardCommand extends Command {
 			cleanup();
 		}
 	}
+}
+
+export function createForwardCommand(definition: ForwardCommandDefinition): typeof Command {
+	return class ForwardCommand extends ProseForwardCommand {
+		static summary = definition.summary;
+		static usage = definition.usage;
+		static examples = definition.examples ?? [];
+
+		protected proseCommand = definition.command;
+	};
 }
 
 function isOclifExit(error: unknown): boolean {
@@ -127,7 +136,7 @@ export function splitHarnessArgs(
 	command: CommandName = "run",
 ): { harness: HarnessName | string; args: string[] } {
 	const args: string[] = [];
-	let harness = env.PROSE_CLI_HARNESS || env.PROSE_HARNESS || env.OPENPROSE_HARNESS || "codex-sdk";
+	let harness = env.PROSE_HARNESS || "codex-sdk";
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
@@ -167,9 +176,10 @@ export function splitHarnessArgs(
 
 export function normalizeEntrypointArgv(
 	argv: readonly string[],
-	env: Record<string, string | undefined> = process.env,
 ): string[] {
 	const normalized: string[] = [];
+	let harness: string | undefined;
+
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		if (arg === undefined) {
@@ -182,7 +192,7 @@ export function normalizeEntrypointArgv(
 		if (arg === "--harness") {
 			const value = argv[index + 1];
 			if (value && value !== "--") {
-				env.PROSE_CLI_HARNESS = value;
+				harness = value;
 				index += 1;
 				continue;
 			}
@@ -190,12 +200,15 @@ export function normalizeEntrypointArgv(
 		if (arg.startsWith("--harness=")) {
 			const value = arg.slice("--harness=".length);
 			if (value) {
-				env.PROSE_CLI_HARNESS = value;
+				harness = value;
 				continue;
 			}
 		}
 		normalized.push(arg);
 		if (!arg.startsWith("-")) {
+			if (harness !== undefined) {
+				normalized.push("--harness", harness);
+			}
 			normalized.push(...argv.slice(index + 1));
 			break;
 		}
