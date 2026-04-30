@@ -45,7 +45,7 @@ export type ProcessRunner = (
 ) => Promise<ProcessRunResult>;
 
 export type CodexThreadOptions = ThreadOptions;
-export type CodexSdkClientOptions = Pick<CodexOptions, "env">;
+export type CodexSdkClientOptions = Pick<CodexOptions, "apiKey" | "env">;
 
 export interface CodexThread {
 	runStreamed(prompt: CodexInput, options?: TurnOptions): Promise<RunStreamedResult>;

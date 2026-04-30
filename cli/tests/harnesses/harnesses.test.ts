@@ -70,6 +70,23 @@ describe("process harnesses", () => {
 		expect(calls).toEqual([{ command: "codex", args: ["exec", prompt] }]);
 	});
 
+	test("codex CLI maps OPENAI_API_KEY to CODEX_API_KEY", async () => {
+		let env: Record<string, string | undefined> | undefined;
+		const io = memoryStreams();
+		const runner: ProcessRunner = async (_command, _args, options) => {
+			env = options.env;
+			return { exitCode: 0 };
+		};
+		const harness = createHarness("codex", { runner });
+
+		await harness.run("prose run inspector.md", {
+			...io.options,
+			env: { OPENAI_API_KEY: "openai-key" },
+		});
+
+		expect(env?.CODEX_API_KEY).toBe("openai-key");
+	});
+
 	test("node runner streams stdout/stderr and reports signal exits", async () => {
 		const io = memoryStreams();
 		const result = await nodeProcessRunner(process.execPath, ["-e", "console.log('before'); process.kill(process.pid, 'SIGTERM')"], {
@@ -152,7 +169,7 @@ describe("codex-sdk harness", () => {
 		expect(exitCode).toBe(0);
 		expect(io.stdout).toBe("sdk output\n");
 		expect(starts).toEqual([{ workingDirectory: "/repo" }]);
-		expect(factoryOptions).toEqual([{ env: { OPENAI_API_KEY: "test" } }]);
+		expect(factoryOptions).toEqual([{ apiKey: "test", env: { OPENAI_API_KEY: "test" } }]);
 	});
 
 	test("maps failed turns to stderr and nonzero exit", async () => {

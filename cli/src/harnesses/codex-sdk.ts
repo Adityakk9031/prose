@@ -1,13 +1,13 @@
 import { writeLine } from "./streams.js";
-import type { CodexSdkFactory, CodexThreadEvent, CodexThreadItem, Harness } from "./types.js";
+import type { CodexSdkClientOptions, CodexSdkFactory, CodexThreadEvent, CodexThreadItem, Harness } from "./types.js";
 
 export interface CodexSdkHarnessOptions {
 	factory?: CodexSdkFactory;
 }
 
-export async function createDefaultCodexSdkClient(options: { env?: Record<string, string> } = {}) {
+export async function createDefaultCodexSdkClient(options: CodexSdkClientOptions = {}) {
 	const { Codex } = await import("@openai/codex-sdk");
-	return new Codex(options.env === undefined ? undefined : { env: options.env });
+	return new Codex(options);
 }
 
 export function createCodexSdkHarness(options: CodexSdkHarnessOptions = {}): Harness {
@@ -18,7 +18,7 @@ export function createCodexSdkHarness(options: CodexSdkHarnessOptions = {}): Har
 		async run(prompt, runOptions) {
 			try {
 				const env = definedEnv(runOptions.env);
-				const codex = await factory(env === undefined ? undefined : { env });
+				const codex = await factory(codexClientOptions(env));
 				const thread = codex.startThread(
 					runOptions.cwd === undefined
 						? undefined
@@ -44,6 +44,18 @@ export function createCodexSdkHarness(options: CodexSdkHarnessOptions = {}): Har
 				throw error;
 			}
 		},
+	};
+}
+
+function codexClientOptions(env: Record<string, string> | undefined) {
+	const apiKey = env?.CODEX_API_KEY ?? env?.OPENAI_API_KEY ?? process.env.CODEX_API_KEY ?? process.env.OPENAI_API_KEY;
+	if (env === undefined && apiKey === undefined) {
+		return undefined;
+	}
+
+	return {
+		...(apiKey === undefined ? {} : { apiKey }),
+		...(env === undefined ? {} : { env }),
 	};
 }
 
