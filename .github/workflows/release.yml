@@ -21,17 +21,21 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify declared versions match the tag
+      - name: Check whether tag is a plugin release
+        id: plugin_tag
         run: |
           set -euo pipefail
           ./scripts/bump-version.sh --check
           declared="$(jq -r '.version' .claude-plugin/plugin.json)"
-          if [[ "$declared" != "${{ steps.version.outputs.version }}" ]]; then
-            echo "error: tag is v${{ steps.version.outputs.version }} but plugin.json says $declared" >&2
-            exit 1
+          if [[ "$declared" == "${{ steps.version.outputs.version }}" ]]; then
+            echo "is_plugin=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_plugin=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping plugin release: tag is v${{ steps.version.outputs.version }} but plugin.json says $declared"
           fi
 
       - name: Extract CHANGELOG block
+        if: steps.plugin_tag.outputs.is_plugin == 'true'
         run: |
           set -euo pipefail
           ./scripts/extract-changelog.sh "${{ steps.version.outputs.version }}" > /tmp/notes.md
@@ -42,6 +46,7 @@ jobs:
           cat /tmp/notes.md
 
       - name: Create GitHub Release
+        if: steps.plugin_tag.outputs.is_plugin == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

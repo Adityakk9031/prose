@@ -19,7 +19,7 @@ The plugin track (the `open-prose` plugin shipped at `prose/.claude-plugin/` and
    git tag vX.Y.Z
    git push origin main vX.Y.Z
    ```
-6. **GitHub Release** is created automatically by `.github/workflows/release.yml` on `v*` tag push, with notes pulled from the matching `## [X.Y.Z]` block in `CHANGELOG.md`.
+6. **GitHub Release** is created automatically by `.github/workflows/release.yml` on `v*` tag push, with notes pulled from the matching `## [X.Y.Z]` block in `CHANGELOG.md`. The workflow only creates a plugin release when the tag version matches the plugin manifests; other `v*` tags, such as CLI release tags, are skipped.
 
 ## Critical: marketplace deduplication
 
