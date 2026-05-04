@@ -3,11 +3,11 @@ role: container-semantics
 summary: |
   How to wire Prose systems. You embody the Forme Container—an intelligent
   dependency injection framework that reads service and system contracts, wires them
-  into a dependency graph, and produces a manifest for the execution engine.
+  into a dependency graph, and produces a compiled Forme manifest for the execution engine.
   Read this file to wire `*.prose.md` systems before execution.
 see-also:
   - contract-markdown.md: System and service file format
-  - prose.md: Execution semantics (Phase 2 — runs the manifest)
+  - prose.md: Execution semantics (Phase 2 — runs the compiled Forme manifest)
   - prosescript.md: Pinned execution block syntax
   - state/filesystem.md: File-system state management
   - primitives/session.md: Session context and compaction guidelines
@@ -16,7 +16,7 @@ see-also:
 
 # Forme Container
 
-This document defines how to wire Prose systems. You are the Forme Container—an intelligent dependency injection framework that reads service and system contracts, resolves dependencies, and produces a manifest the execution engine can follow.
+This document defines how to wire Prose systems. You are the Forme Container—an intelligent dependency injection framework that reads service and system contracts, resolves dependencies, and produces a compiled Forme manifest the execution engine can follow.
 
 ## Two Phases of a Prose Run
 
@@ -24,10 +24,11 @@ A Prose system runs in two phases:
 
 | Phase | Who | What | Produces |
 |-------|-----|------|----------|
-| **Phase 1: Wiring** | Forme (this document) | Read services and systems, match contracts, build dependency graph | `manifest.run.md` |
-| **Phase 2: Execution** | Prose VM (`prose.md`) | Read manifest, spawn sessions, pass pointers | System output |
+| **Phase 1: Wiring** | Forme (this document) | Read services and systems, match contracts, build dependency graph | Compiled Forme manifest |
+| **Phase 2: Execution** | Prose VM (`prose.md`) | Read compiled manifest, spawn sessions, pass pointers | System output |
 
-You are Phase 1. You produce the manifest. The Prose VM consumes it.
+You are Phase 1. You produce the compiled Forme manifest. The Prose VM
+consumes it.
 
 ---
 
@@ -55,14 +56,14 @@ When you wire a system, you ARE the DI container. This is not a metaphor:
 | Your reading of contracts | Dependency resolution |
 | Your matching of `### Requires` ↔ `### Ensures` | Auto-wiring |
 | Your judgment on ambiguity | Qualifier resolution |
-| Your output (manifest.run.md) | The application context |
+| Your output (compiled Forme manifest JSON) | The application context |
 
 **What this means in practice:**
 
 - You read every service and system contract carefully
 - You match outputs to inputs by understanding, not string matching
 - You flag ambiguity rather than guessing silently
-- You produce a manifest that is complete, unambiguous, and executable
+- You produce a compiled manifest that is complete, unambiguous, and executable
 
 ---
 
@@ -119,13 +120,13 @@ For each entry in `### Services`, locate the corresponding `*.prose.md` file:
 **Resolution order:**
 1. Same directory as the system file: `./researcher.prose.md`
 2. A subdirectory matching the name: `./researcher/index.prose.md`
-3. `.agents/prose/deps/` directory (for git-native deps installed via `prose install` — see `deps.md`):
+3. `<openprose-root>/deps/` directory (for git-native deps installed via `prose install` — see `deps.md`):
    - Expand `std/` shorthand to `github.com/openprose/prose/packages/std/`
    - Expand `co/` shorthand to `github.com/openprose/prose/packages/co/`
-   - Map the service name first to `.agents/prose/deps/{host}/{owner}/{repo}/{path}.prose.md`, then to `.agents/prose/deps/{host}/{owner}/{repo}/{path}/index.prose.md`
-   - Example: `std/evals/inspector` → `.agents/prose/deps/github.com/openprose/prose/packages/std/evals/inspector.prose.md`
-   - Example: `co/systems/company-repo-checker` → `.agents/prose/deps/github.com/openprose/prose/packages/co/systems/company-repo-checker/index.prose.md`
-   - Example: `github.com/alice/tools/formatter` → `.agents/prose/deps/github.com/alice/tools/formatter.prose.md`
+   - Map the service name first to `<openprose-root>/deps/{host}/{owner}/{repo}/{path}.prose.md`, then to `<openprose-root>/deps/{host}/{owner}/{repo}/{path}/index.prose.md`
+   - Example: `std/evals/inspector` → `<openprose-root>/deps/github.com/openprose/prose/packages/std/evals/inspector.prose.md`
+   - Example: `co/systems/company-repo-checker` → `<openprose-root>/deps/github.com/openprose/prose/packages/co/systems/company-repo-checker/index.prose.md`
+   - Example: `github.com/alice/tools/formatter` → `<openprose-root>/deps/github.com/alice/tools/formatter.prose.md`
 4. Bare `owner/repo` identifiers (no host prefix): reserved for the OpenProse registry (future home at `p.prose.md`); inert today
 
 **Pattern resolution:**
@@ -145,7 +146,7 @@ If a service or system cannot be resolved, emit an error:
   Searched:
     - ./researcher.prose.md
     - ./researcher/index.prose.md
-    - .agents/prose/deps/ (no matching path)
+    - <openprose-root>/deps/ (no matching path)
   System file: ./research-system.prose.md
 ```
 
@@ -351,98 +352,75 @@ Before producing the manifest, check:
 Copy each resolved service, subsystem, and pattern source `*.prose.md` file into the run directory:
 
 ```
-.agents/prose/runs/{id}/sources/{name}.prose.md
+<openprose-root>/runs/{id}/sources/{name}.prose.md
 ```
 
 This ensures the execution engine has a stable snapshot of the system as it was at wiring time, even if the source files change during execution.
 
-### Step 8: Write the Manifest
+### Step 8: Emit the Compiled Manifest
 
-Write the manifest to `.agents/prose/runs/{id}/manifest.run.md`. This is your primary output—the artifact that Phase 2 (the Prose VM) reads to execute the system.
+Emit the compiled Forme manifest as structured JSON. In repository compile, it
+lives inside `dist/manifest.next.json` under `formeManifests`. During a
+run, a filesystem backend may snapshot it as `forme.manifest.json`, but the
+JSON object is the canonical runtime contract.
 
 ---
 
 ## Manifest Format
 
-The manifest is a Markdown file the execution engine reads to run the system. It must be complete and unambiguous—the execution engine should not need to re-read the original source files to understand the wiring.
+The compiled Forme manifest is a JSON object the execution engine reads to run
+the system. It must be complete and unambiguous: the execution engine should
+not need to re-read original source files to understand wiring.
 
-```markdown
-# Manifest: {system-name}
-
-Generated by Forme at {ISO8601 timestamp}
-Source: {path to system file}
-
----
-
-## Caller Interface
-
-requires:
-- {name} (from user): {description}
-- {name} (from user): run — {description}        # run-typed input
-- {name} (from user): run[] — {description}       # fan-in run-typed input
-
-returns:
-- {name} (from {service}): {description}
-
----
-
-## Graph
-
-### {service-name}
-
-source: sources/{service-name}.prose.md
-workspace: workspace/{service-name}/
-
-inputs:
-  {local-name} ← bindings/{source-service}/{output-name}.md
-
-outputs:
-  {output-name} → workspace/{service-name}/{output-name}.md
-  (public) {output-name} → bindings/{service-name}/{output-name}.md
-
-errors:
-  {error-name}: {description}
-
-delegates:
-  {delegate-name}: sources/{delegate-name}.prose.md
-
----
-
-### {next-service-name}
-
-...
-
----
-
-## Execution Order
-
-1. {service} (depends on: caller)
-2. {service} (depends on: {service})
-3. {service} (depends on: {service}, {service})
-
-Parallelizable: {list of services that can run concurrently, if any}
-
-## Environment
-
-| Variable | Required by |
-|----------|-------------|
-| {VAR_NAME} | {service-name}, {service-name} |
-| {VAR_NAME} | {service-name} |
-
-## Constraints
-
-### {pattern-instance-name} (expanded from {pattern-name})
-
-- {invariant}: {enforcement description}
-- Termination: {termination condition}
-- On exhaustion: {exhaustion behavior}
-
-## Warnings
-
-- {any warnings from validation}
+```json
+{
+  "id": "{system-name}",
+  "systemName": "{system-name}",
+  "sourcePath": "{path to system file}",
+  "caller": {
+    "requires": [{ "name": "{input}", "description": "{description}" }],
+    "returns": [{ "name": "{output}", "source": "{service-name}" }]
+  },
+  "graph": [
+    {
+      "id": "{service-name}",
+      "sourcePath": "{path to service source}",
+      "workspacePath": "workspace/{service-name}/",
+      "inputs": [
+        {
+          "name": "{local-name}",
+          "from": "service",
+          "sourceNodeId": "{source-service}",
+          "sourceOutput": "{output-name}",
+          "path": "bindings/{source-service}/{output-name}.md"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "{output-name}",
+          "workspacePath": "workspace/{service-name}/{output-name}.md",
+          "bindingPath": "bindings/{service-name}/{output-name}.md",
+          "public": true
+        }
+      ],
+      "errors": [],
+      "delegates": []
+    }
+  ],
+  "executionOrder": [
+    { "nodeId": "{service-name}", "dependsOn": ["caller"] }
+  ],
+  "environment": [],
+  "warnings": []
+}
 ```
 
-**Constraints.** One subsection per expanded pattern. Each invariant from the pattern definition becomes a constraint the Prose VM enforces during Phase 2. Includes information firewalls (what data to strip between services), termination bounds (iteration limits), monotonicity ratchets (certified progress only grows), and exhaustion behavior (what to return when the loop budget runs out). Only present when the system uses patterns. The Prose VM enforces these at runtime — see `prose.md`, Step 4e: Enforce Pattern Constraints.
+**Constraints.** Current v0 repository IR does not carry a separate constraint
+section. Compile pattern-backed systems into ordinary graph wiring when the
+pattern can be expanded without extra runtime rules; otherwise emit a warning
+and keep the source explicit. A future manifest version may encode pattern
+constraints such as firewalls, termination bounds, ratchets, and exhaustion
+behavior.
 
 Constraint types emitted:
 
@@ -454,12 +432,12 @@ Constraint types emitted:
 
 ### Manifest Sections Explained
 
-**Caller Interface.** What the system needs from the user and what it returns. The execution engine uses this to bind inputs at system start and collect outputs at system end. When a caller input has the `run` or `run[]` keyword, it appears in the manifest as `run — {description}` or `run[] — {description}`. This preserves the keyword so the VM applies run-specific validation and binding (see `prose.md`).
+**Caller Interface.** What the system needs from the user and what it returns. The execution engine uses this to bind inputs at system start and collect outputs at system end. When a caller input has the `run` or `run[]` keyword, preserve that in the field description or metadata so the VM applies run-specific validation and binding (see `prose.md`).
 
-**Graph.** One section per service. Contains:
-- `source` — path to the copied source file (in `sources/`)
-- `workspace` — path to the service's private working directory
-- `inputs` — each input mapped to a specific file path, using the `←` arrow to show where it comes from
+**Graph.** One node per service. Contains:
+- `sourcePath` — path to the copied source file or compiled source snapshot
+- `workspacePath` — path to the service's private working directory
+- `inputs` — each input mapped to a specific binding path and source
 - `outputs` — each declared `ensures` output, with the workspace path (where the service writes) and the bindings path (where it gets copied to for downstream consumption)
 - `errors` — the service's declared error conditions
 - `delegates` — valid runtime delegation targets for this service (from `shape.delegates`), with paths to their source files. Only present if the service has `shape.delegates`.
@@ -475,8 +453,8 @@ Constraint types emitted:
 After wiring, the run directory looks like:
 
 ```
-.agents/prose/runs/{id}/
-├── manifest.run.md                   # The wiring graph (this is your output)
+<openprose-root>/runs/{id}/
+├── forme.manifest.json               # Optional filesystem snapshot of compiled Forme manifest
 ├── root.prose.md                        # Copy of the root service or system file
 ├── sources/                       # Copied service, system, and pattern source files
 │   ├── researcher.prose.md
@@ -494,7 +472,8 @@ After wiring, the run directory looks like:
 └── agents/                       # Persistent agent memory
 ```
 
-**You create:** `manifest.run.md`, `root.prose.md` (copy), and `sources/` (copies).
+**You create:** the compiled Forme manifest object, plus `root.prose.md` and
+`sources/` snapshots when using the filesystem backend.
 
 **Phase 2 creates:** `workspace/`, `bindings/`, `vm.log.md`, `agents/`.
 
@@ -706,7 +685,11 @@ kind: system
 5. Expand `### Delegation`: replace `worker` with `radar-compiler`, `critic` with `quality-reviewer`, `max_rounds` with `3`.
 6. Compute derived contract: `quality-checked-output.requires` = `brief` (from `radar-compiler.requires`). `quality-checked-output.ensures` = `report` (the pattern's output).
 
-**Resulting manifest entries:**
+**Conceptual expansion notes:**
+
+These notes show what the compiler must preserve semantically. Current v0
+repository IR should emit plain graph wiring when possible; it should warn
+rather than invent a hidden constraints schema.
 
 ```markdown
 ### quality-checked-output (expanded from worker-critic)
@@ -794,8 +777,8 @@ The manifest contains delegation steps for both layers. The inner constraints (i
 If the file being run has `kind: service`, Forme is not needed:
 
 - The file is the sole service for this run
-- No wiring is needed; the Prose VM validates the contract and writes a minimal
-  `manifest.run.md` for uniform run state
+- No wiring is needed; the Prose VM validates the contract and records a
+  minimal service activation record for uniform run state
 - The Prose VM spawns one session for this service
 
 ### Empty `### Services`
@@ -847,10 +830,13 @@ not exact phrasing.
 
 1. **Resolve the subject.** First resolve `subject:` as a service or system path using standard service/system resolution. If that fails and the subject is a bare name, scan the test file's directory and nearest OpenProse source/package root for `*.prose.md` files whose frontmatter `name:` matches the subject. A test does not execute a pattern directly.
 2. **Bind fixtures as caller inputs.** `### Fixtures` entries become the caller inputs. No `ask_user` prompting — tests are fully self-contained.
-3. **Produce a test manifest.** Same format as a regular manifest, but with an additional `## Evaluation` section containing the `### Expects` and `### Expects Not` clauses. Preserve assertion text and target output names so the VM can report each assertion separately.
-4. **Wire the subject's dependencies.** If the subject is a system with its own services, wire those normally. If the subject is a single service, produce a minimal manifest (same as single-service runs).
+3. **Produce a test manifest.** Same structured manifest shape as a regular
+   Forme manifest, with an additional evaluation payload containing the
+   `### Expects` and `### Expects Not` clauses. Preserve assertion text and
+   target output names so the VM can report each assertion separately.
+4. **Wire the subject's dependencies.** If the subject is a system with its own services, wire those normally. If the subject is a single service, produce a minimal service activation record.
 
-The test manifest's additional section:
+The test manifest's additional evaluation payload:
 
 ```markdown
 ## Evaluation
@@ -874,22 +860,22 @@ The Prose VM handles execution and assertion evaluation — see `prose.md`, Exec
 Forme is invoked as Phase 1 of a `prose run` command:
 
 ```
-prose run ./.agents/prose/src/research-system/index.prose.md
+prose run ./<openprose-root>/src/research-system/index.prose.md
 ```
 
 The runtime:
 1. Detects `kind: system` with `### Services` -> triggers Forme (Phase 1)
 2. Loads this document (`forme.md`) into the agent's context
 3. The agent performs the wiring algorithm
-4. The agent writes `manifest.run.md` and copies source files
+4. The agent emits the compiled Forme manifest and snapshots source files
 5. The runtime loads `prose.md` into the agent's context (Phase 2)
-6. The agent reads `manifest.run.md` and executes the system
+6. The agent reads the compiled Forme manifest and executes the system
 
 No frontmatter field triggers system wiring.
 
 For `kind: service` files, Phase 1 is skipped. The file is passed directly to
 the Prose VM, which creates the run directory, snapshots the source, and writes
-a minimal `manifest.run.md` before spawning the service session.
+a minimal service activation record before spawning the service session.
 
 Wiring is part of `prose run`: when the runtime detects a multi-service system,
 it invokes this algorithm automatically before execution. Any future wire-only
@@ -908,9 +894,11 @@ The Forme Container:
 5. **Auto-wires** by matching `### Requires` ↔ `### Ensures` using semantic understanding
 6. **Validates** the dependency graph for errors and warnings (including pattern-specific checks)
 7. **Copies** source files into the run directory (`sources/`)
-8. **Writes** the manifest (`manifest.run.md`) with the complete wiring graph and pattern constraints
+8. **Emits** the compiled Forme manifest with the complete wiring graph and warnings
 9. **Hands off** to the Prose VM for execution
 
-The manifest is complete, unambiguous, and human-readable. It can be inspected for debugging, pinned by the author for determinism, or generated fresh each run for maximum adaptability.
+The manifest is complete, unambiguous, and structured. It can be rendered for
+debugging, pinned by the author for determinism, or generated fresh each run
+for maximum adaptability.
 
 The language is self-evident by design. When in doubt about a contract match, flag the ambiguity rather than guessing silently. The author can always pin the wiring if your auto-wiring doesn't match their intent.

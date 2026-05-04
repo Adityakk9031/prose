@@ -15,15 +15,17 @@ plan.
 ## Current Conventions
 
 - Authored source files are `*.prose.md`.
-- Project, directory, and repository scoped OpenProse lives under
-  `.agents/prose/`.
-- User and global scoped OpenProse lives under `~/.agents/prose/`.
-- Source lives in `src/`; runs live in `runs/`.
+- Every workspace has an active OpenProse root.
+- Native repositories use the repository root as the OpenProse root.
+- Attached repositories use `repo/.agents/prose`.
+- User-global OpenProse uses `~/.agents/prose`.
+- The root contains `src/`, `dist/`, `runs/`, `state/`, `deps/`,
+  `prose.lock`, and `.env`.
+- Durable cross-run agents live in `state/agents/`.
+- Durable responsibility status and pressure live in `state/responsibilities/`.
 - Multi-file systems conventionally use `index.prose.md`.
-- Dependencies live in `.agents/prose/deps/`.
-- The lockfile is `.agents/prose/prose.lock`.
-- Generated run internals are `manifest.run.md`, `root.prose.md`, and
-  `vm.log.md`.
+- Generated run internals include the compiled activation manifest,
+  `root.prose.md`, and `vm.log.md`.
 
 ## History
 
@@ -39,10 +41,15 @@ plan.
   helper moved under the open-prose skill.
 - CLI `0.1.x`: real `prose` CLI and harness support shipped, including Claude
   and Codex plugin surfaces.
-- Current unreleased docs: vocabulary settled on `kind: service`, `kind:
-  system`, `kind: test`, and `kind: pattern`; patterns replaced topology/composite
-  language; state moved to `.agents/prose`; source files moved to
-  `*.prose.md`; generated run files were disambiguated.
+- `v0.12.0`: Responsibility Runtime release. Vocabulary settled on `kind:
+  service`, `kind: system`, `kind: gateway`, `kind: test`, `kind: pattern`,
+  and `kind: responsibility`; patterns replaced topology/composite language;
+  source files moved to `*.prose.md`; generated run files were disambiguated;
+  the filesystem model settled on a single OpenProse root with `src/`, `dist/`,
+  `runs/`, `state/`, and `deps/`; `prose compile` emits
+  `dist/manifest.next.json`; `prose serve` consumes
+  `dist/manifest.active.json`; `prose status` reads active IR, trigger plans,
+  recent runs, and responsibility status/pressure from the OpenProse root.
 
 ## Upgrade Command
 
@@ -50,8 +57,9 @@ plan.
 
 1. Inspect the current working directory, repository root when detectable, and
    any explicitly supplied path.
-2. Look for old structures: `.prose/`, `~/.prose/`, `.deps/`, root
-   `prose.lock`, plain source `*.md` with `kind:`, standalone `*.prose`,
+2. Look for old structures: `.prose/`, `~/.prose/`, `.deps/`,
+   `.agents/prose/agents/`, `dist/prose/`, lockfiles outside the active
+   OpenProse root, plain source `*.md` with `kind:`, standalone `*.prose`,
    `index.md`, `manifest.md`, `root.md`, and `state.md`.
 3. Inspect nearby files before deciding. Do not rely only on filenames.
 4. Print the exact planned moves, renames, content rewrites, and skipped
@@ -69,16 +77,18 @@ plan.
 
 | Old | Current |
 |-----|---------|
-| `.prose/.env` | `.agents/prose/.env` |
-| `.prose/runs/` | `.agents/prose/runs/` |
-| `.prose/agents/` | `.agents/prose/agents/` |
+| `.prose/.env` | `<openprose-root>/.env` |
+| `.prose/runs/` | `<openprose-root>/runs/` |
+| `.prose/agents/` | `<openprose-root>/state/agents/` |
+| `.agents/prose/agents/` | `<openprose-root>/state/agents/` |
 | `~/.prose/` | `~/.agents/prose/` |
-| `.deps/` | `.agents/prose/deps/` |
-| `prose.lock` | `.agents/prose/prose.lock` |
-| source `*.md` with `kind:` | `*.prose.md` under `.agents/prose/src/` |
+| `.deps/` | `<openprose-root>/deps/` |
+| `dist/prose/` | `<openprose-root>/dist/` |
+| misplaced `prose.lock` | `<openprose-root>/prose.lock` |
+| source `*.md` with `kind:` | `*.prose.md` under `<openprose-root>/src/` |
 | `index.md` system root | `index.prose.md` |
 | standalone `*.prose` | `*.prose.md` with Contract Markdown frontmatter and `### Execution` |
-| run `manifest.md` | `manifest.run.md` |
+| run `manifest.md` | compiled activation manifest |
 | run `root.md` | `root.prose.md` |
 | run `state.md` | `vm.log.md` |
 

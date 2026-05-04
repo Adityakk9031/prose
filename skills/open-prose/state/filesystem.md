@@ -13,9 +13,9 @@ see-also:
 # File-System State Management
 
 This document describes how the OpenProse VM tracks execution state using files
-under the active OpenProse root. Project, directory, and repository scoped work
-uses `./.agents/prose/` at the repository root when one is known, otherwise the
-current working directory. User or global scoped work uses `~/.agents/prose/`.
+under `<openprose-root>`. Native repositories use the repository root as
+`<openprose-root>`. Attached repositories use `repo/.agents/prose`. User-global
+work uses `~/.agents/prose`.
 
 This file is the normative reference for filesystem artifact layout and file
 formats. `prose.md` summarizes the same model from the execution algorithm's
@@ -38,8 +38,7 @@ File-based state persists all execution artifacts to disk. This enables:
 ## Directory Structure
 
 ```
-# Project-level OpenProse root
-.agents/prose/
+# <openprose-root>
 ├── src/                                    # Authored OpenProse source
 │   ├── research-system/
 │   │   ├── index.prose.md                  # Conventional multi-file system root
@@ -49,9 +48,12 @@ File-based state persists all execution artifacts to disk. This enables:
 │   │   └── worker-critic.prose.md
 │   └── tests/
 │       └── research-system.test.prose.md
+├── dist/                                   # Compiled intent
+│   ├── manifest.next.json
+│   └── manifest.active.json
 ├── runs/
 │   └── {YYYYMMDD}-{HHMMSS}-{random}/
-│       ├── manifest.run.md                     # Wiring graph, or minimal service manifest
+│       ├── forme.manifest.json                 # Compiled Forme manifest for systems
 │       ├── root.prose.md                         # Copy of the invoked service or system file
 │       ├── sources/                        # Service, system, and pattern source files copied by Phase 1
 │       │   ├── researcher.prose.md
@@ -84,15 +86,22 @@ File-based state persists all execution artifacts to disk. This enables:
 │       │   └── synthesizer/
 │       │       └── report.md
 │       ├── vm.log.md                        # Append-only execution log
-│       └── agents/                         # Persistent agent memory
+│       └── agents/                         # Run-scoped agent memory
 │           └── {name}/
 │               ├── memory.md
 │               ├── {name}-001.md
 │               └── ...
-├── agents/                                 # Project-scoped agent memory
-│   └── {name}/
-│       ├── memory.md
-│       └── ...
+├── state/                                  # Durable cross-run state
+│   ├── agents/
+│   │   └── {name}/
+│   │       ├── memory.md
+│   │       └── ...
+│   └── responsibilities/
+│       └── {responsibility-id}/
+│           ├── latest.json
+│           ├── status.jsonl
+│           ├── pressure.latest.json
+│           └── pressure.jsonl
 ├── deps/                                  # Cloned dependency repos (gitignored)
 │   ├── github.com/
 │   │   ├── openprose/
@@ -113,14 +122,13 @@ File-based state persists all execution artifacts to disk. This enables:
 ├── prose.lock                             # Pinned dependency SHAs (committed to git)
 └── .env                                   # Config (simple key=value format)
 
-# User-level state (in home directory)
+# User-global OpenProse root
 ~/.agents/prose/
 ├── src/                                    # User/global scoped source
 ├── runs/                                  # User/global scoped run state
-├── agents/                                # User-scoped agent memory (cross-project)
-│   └── {name}/
-│       ├── memory.md
-│       └── ...
+├── state/                                 # User-global durable cross-run state
+│   ├── agents/
+│   └── responsibilities/
 ├── deps/                                  # User/global scoped dependency cache
 ├── prose.lock
 └── .env
@@ -195,9 +203,11 @@ bindings/
 
 ## File Formats
 
-### `manifest.run.md`
+### Compiled Activation Manifest
 
-The wiring graph produced by Forme. See `forme.md` for the full format specification. Contains:
+The wiring graph produced by Forme. For filesystem runs, systems may snapshot
+the compiled JSON object as `forme.manifest.json`. See `forme.md` for the full
+format specification. Contains:
 
 - Caller interface (requires/returns)
 - Per-service entries (source, workspace, inputs with `←` mappings, outputs)
@@ -240,7 +250,7 @@ type: run
 ---
 
 run: 20260406-201439-1a3369
-path: .agents/prose/runs/20260406-201439-1a3369
+path: <openprose-root>/runs/20260406-201439-1a3369
 root: customer-discovery
 status: complete
 ```
@@ -257,21 +267,24 @@ type: run[]
 ---
 
 - run: 20260406-201439-1a3369
-  path: .agents/prose/runs/20260406-201439-1a3369
+  path: <openprose-root>/runs/20260406-201439-1a3369
   root: customer-discovery
   status: complete
 
 - run: 20260407-031438-bf26a3
-  path: .agents/prose/runs/20260407-031438-bf26a3
+  path: <openprose-root>/runs/20260407-031438-bf26a3
   root: competitive-landscape
   status: complete
 ```
 
-The downstream service receives the path and can read the run's bindings, `vm.log.md`, and `manifest.run.md` directly. The structured header gives the service immediate access to key metadata without traversing the filesystem.
+The downstream service receives the path and can read the run's bindings,
+`vm.log.md`, and compiled activation manifest directly. The structured header
+gives the service immediate access to key metadata without traversing the
+filesystem.
 
 **Resolution order for run references:**
 
-- Bare ID (e.g., `20260406-201439-1a3369`): resolves to `.agents/prose/runs/{id}`
+- Bare ID (e.g., `20260406-201439-1a3369`): resolves to `<openprose-root>/runs/{id}`
 - `~/{id}`: resolves to `~/.agents/prose/runs/{id}` (user scope)
 - Absolute path: used as-is
 
@@ -389,7 +402,7 @@ The VM does NOT rewrite the entire file. Each write is a single line append.
 To resume an interrupted run:
 
 1. Read `vm.log.md` — find the last completed service
-2. Read `manifest.run.md` — get the execution order
+2. Read the compiled activation manifest — get the execution order
 3. Scan `bindings/` — confirm existing outputs
 4. Continue from the next service in execution order
 
@@ -399,7 +412,7 @@ To resume an interrupted run:
 
 | Artifact | Written By | When |
 |----------|------------|------|
-| `manifest.run.md` | Forme for systems; VM for single-service runs | Before execution |
+| compiled activation manifest | Forme for systems; VM for single-service runs | Before execution |
 | `root.prose.md` | Forme for systems; VM for single-service runs | Before execution |
 | `sources/*.prose.md` | Forme for systems; VM for single-service runs | Before execution |
 | `bindings/caller/*.md` | VM | At system start |
@@ -409,8 +422,10 @@ To resume an interrupted run:
 | `workspace/{service}/__delegate/{delegate}/{id}-response.md` | VM | After delegate completes |
 | `bindings/{service}/*` | VM (copy from workspace) | After service completes |
 | `vm.log.md` | VM | After each event |
-| `agents/{name}/memory.md` | Persistent agent | During service execution |
-| `agents/{name}/{name}-NNN.md` | Persistent agent | During service execution |
+| `runs/{id}/agents/{name}/memory.md` | Execution-scoped agent | During service execution |
+| `runs/{id}/agents/{name}/{name}-NNN.md` | Execution-scoped agent | During service execution |
+| `state/agents/{name}/memory.md` | Durable cross-run agent | During service execution |
+| `state/agents/{name}/{name}-NNN.md` | Durable cross-run agent | During service execution |
 
 **Key principle:** The VM orchestrates and copies. Subagents write their own outputs to workspace. The VM publishes them to bindings. The VM never reads full output content — it tracks file paths and copies files.
 
@@ -440,7 +455,10 @@ If the service wrote `__error.md` instead:
 
 ## Agent Memory Files
 
-### `agents/{name}/memory.md`
+Agent memory lives under `runs/{id}/agents/{name}/` for execution-scoped
+sessions and under `state/agents/{name}/` for durable cross-run sessions.
+
+### `{agent-scope}/{name}/memory.md`
 
 The agent's current accumulated state:
 
@@ -462,7 +480,7 @@ Researcher produces good breadth but sometimes lacks depth on subtopics.
 - Source diversity is low — too many arXiv papers, not enough industry reports
 ```
 
-### `agents/{name}/{name}-NNN.md`
+### `{agent-scope}/{name}/{name}-NNN.md`
 
 Prior segment records:
 
@@ -483,13 +501,13 @@ timestamp: 2026-03-17T14:32:15Z
 
 | Scope | Declaration | Path | Lifetime |
 |-------|-------------|------|----------|
-| Execution (default) | `### Runtime` with `persist: true` | `.agents/prose/runs/{id}/agents/{name}/` | Dies with run |
-| Project | `### Runtime` with `persist: project` | `.agents/prose/agents/{name}/` | Survives runs |
-| User | `### Runtime` with `persist: user` | `~/.agents/prose/agents/{name}/` | Survives projects |
+| Execution (default) | `### Runtime` with `persist: true` | `<openprose-root>/runs/{id}/agents/{name}/` | Dies with run |
+| Project | `### Runtime` with `persist: project` | `<openprose-root>/state/agents/{name}/` | Survives runs |
+| User | `### Runtime` with `persist: user` | `~/.agents/prose/state/agents/{name}/` | Survives projects |
 
 ---
 
-## `.agents/prose/.env`
+## `<openprose-root>/.env`
 
 Simple key=value configuration:
 
@@ -506,8 +524,8 @@ When a system imports and invokes another system (via installed dependency or
 local file), the imported system runs in its own subdirectory:
 
 ```
-.agents/prose/runs/{id}/imports/{handle}--{slug}/
-├── manifest.run.md
+<openprose-root>/runs/{id}/imports/{handle}--{slug}/
+├── forme.manifest.json
 ├── root.prose.md
 ├── sources/
 ├── workspace/

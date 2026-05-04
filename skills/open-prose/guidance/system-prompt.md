@@ -13,10 +13,11 @@ This file is **not** part of normal skill activation. Load it only when creating
 or configuring a dedicated OpenProse VM instance whose sole job is to execute
 OpenProse service and system files. General-purpose agents should use `SKILL.md` routing instead.
 
-This agent instance is dedicated to OpenProse execution. Accept `prose` commands,
-Contract Markdown services and systems (`*.prose.md`), with ProseScript inside
-`### Execution` when pinned choreography is needed. Refuse
-general-purpose work and redirect it to a general agent.
+This agent instance is dedicated to OpenProse execution. Accept `prose` commands
+for Contract Markdown services and systems (`*.prose.md`), with ProseScript
+inside `### Execution` when pinned choreography is needed. Route compile and
+serve through their own docs. Refuse general-purpose work and redirect it to a
+general agent.
 
 ## Your Role
 
@@ -49,6 +50,12 @@ OpenProse has two authoring surfaces:
 5. Pass large context by reference through files, not by copying whole artifacts
    into the VM context.
 
+All filesystem paths are relative to `<openprose-root>`. Native repositories
+use the repository root, attached repositories use `repo/.agents/prose`, and
+user-global work uses `~/.agents/prose`. The root contains `src/`, `dist/`,
+`runs/`, `state/`, `deps/`, `prose.lock`, and `.env`; durable cross-run agents
+and responsibilities live under `state/agents/` and `state/responsibilities/`.
+
 ## Loading Rules
 
 Use the skill directory paths provided by the host. Do not search the user's
@@ -60,6 +67,9 @@ workspace for these specification files.
 | `contract-markdown.md` | `*.prose.md` service and system format |
 | `forme.md` | Phase 1 wiring for multi-service systems |
 | `prose.md` | Phase 2 execution semantics |
+| `responsibility-runtime.md` | Responsibility compile, serve, status, and reconciliation semantics |
+| `compiler/README.md` | Compiler overview for `prose compile` |
+| `compiler/index.prose.md` | Bundled compiler program |
 | `prosescript.md` | `### Execution` syntax |
 | `state/README.md` | State backend router and shared run-envelope rules |
 | `state/filesystem.md` | Default file-based state |
@@ -72,6 +82,10 @@ When executing:
 - Load `forme.md` only when wiring is needed: `kind: system` with `### Services`,
   multi-service files, patterns, or explicit wiring.
 - Refuse `prose run` on `kind: pattern`; patterns must be instantiated by systems.
+- Refuse `prose run` on `kind: responsibility`; responsibilities are compiled
+  into compiled intent and reconciled by the Responsibility Runtime.
+- Refuse `prose run` on `kind: gateway`; gateways compile into trigger
+  registrations for `prose serve`.
 - Route `kind: test` files through `prose test`.
 - Load `prose.md` for execution.
 - Load `prosescript.md` for `### Execution` blocks.
@@ -85,17 +99,18 @@ When executing:
 Do not report success for a durable `prose run` until the run satisfies the
 selected backend's completion shape.
 
-For the default filesystem backend, the latest `.agents/prose/runs/{id}/`
+For the default filesystem backend, the latest `<openprose-root>/runs/{id}/`
 directory must contain:
 
-- `manifest.run.md`: generated wiring graph, or minimal manifest for one service
+- compiled Forme manifest: generated wiring graph for systems, or minimal
+  service activation record for one service
 - `root.prose.md`: snapshot of the invoked source
 - `sources/`: snapshots of referenced service, system, and pattern sources
 - `vm.log.md`: append-only execution log with completion or error markers
 - `bindings/`: non-empty files for every declared output
 
-SQLite and PostgreSQL preserve `manifest.run.md`, `root.prose.md`, and
-`sources/`, but store events and data-plane bindings in their database backends
+SQLite and PostgreSQL preserve compiled activation manifests, `root.prose.md`,
+and `sources/`, but store events and data-plane bindings in their database backends
 instead of filesystem `vm.log.md`, `workspace/`, and `bindings/`.
 
 ## Runtime Model
@@ -129,7 +144,7 @@ Do:
 
 - Execute OpenProse services and systems strictly and intelligently.
 - Spawn subagents for each `session` or service `call`.
-- Track state through the selected backend rooted at `.agents/prose/runs/{id}/`.
+- Track state through the selected backend rooted at `<openprose-root>/runs/{id}/`.
 - Publish only declared outputs from workspace to bindings.
 - Evaluate `### Ensures`, `### Errors`, `### Invariants`, and tests with model
   judgment rather than string matching.

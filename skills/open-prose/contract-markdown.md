@@ -1,12 +1,13 @@
 ---
 role: contract-markdown-format
 summary: |
-  Canonical Markdown format for OpenProse services, systems, tests, and
-  patterns. Defines the header hierarchy, contract sections, and how Forme
-  should extract services and systems from `*.prose.md` files.
+  Canonical Markdown format for OpenProse services, systems, gateways, tests,
+  patterns, and responsibilities. Defines the header hierarchy, contract
+  sections, and how interpreters should extract `*.prose.md` source.
 see-also:
   - forme.md: Wiring semantics
   - prose.md: Execution semantics
+  - responsibility-runtime.md: Responsibility Runtime semantics
   - prosescript.md: Imperative scripting layer for `### Execution`
   - guidance/tenets.md: Design reasoning
   - guidance/authoring.md: Authoring guidance
@@ -14,17 +15,18 @@ see-also:
 
 # Contract Markdown
 
-Contract Markdown is the human-facing `*.prose.md` format for OpenProse services,
-systems, tests, and patterns. It uses tiny YAML frontmatter for file
-identity, then Markdown sections for the human-facing language: services,
-contracts, runtime hints, shape, and execution.
+Contract Markdown is the human-facing `*.prose.md` format for OpenProse
+services, systems, gateways, tests, patterns, and responsibilities. It uses
+tiny YAML frontmatter for file identity, then Markdown sections for the
+human-facing language: contracts, runtime hints, shape, execution, and standing
+goals.
 
 The format optimizes for two readers:
 
 1. Humans scanning a workflow.
 2. Agents extracting contracts and wiring services and systems.
 
-## Runnable Shapes
+## Authored Shapes
 
 `prose run` accepts two authored shapes:
 
@@ -43,6 +45,41 @@ A **pattern** is not domain work by itself. It is a reusable agent design
 pattern: slots, config, invariants, and delegation rules for how filled
 services interact. Patterns are not run directly; systems instantiate them
 inside `### Services`.
+
+A **responsibility** is responsibility-oriented source, not a direct run
+target. It defines a standing goal that must remain true over time. The
+compiler lowers it into responsibility, concrete triggers, and activation
+intent.
+Pressure is runtime feedback produced when the Reactor judges the standing goal
+to be drifting, down, or blocked.
+
+A **gateway** is optional ingress source, not a direct run target. It describes
+how time or the outside world enters OpenProse: schedules, local HTTP routes,
+webhooks, or provider events. The compiler lowers gateways into concrete
+serve-facing `triggers[]`.
+
+Gateway sections are intentionally small:
+
+```markdown
+---
+name: github-stars
+kind: gateway
+---
+
+### Receives
+
+- POST /webhooks/github/stars
+- Provider: GitHub
+- Event: star
+
+### Emits
+
+- high-intent-stargazer-outreach.evidence-change
+
+### Payload
+
+Pass the webhook payload as activation event context.
+```
 
 ## Core Shape
 
@@ -112,17 +149,27 @@ Forme and the Prose VM recognize these `###` sections case-insensitively:
 | `### Slots` | pattern | Services a pattern requires from its caller |
 | `### Config` | pattern | Pattern-level parameters and defaults |
 | `### Delegation` | pattern | ProseScript or pseudocode describing slot interaction |
+| `### Goal` | responsibility | The invariant: what must remain true over time |
+| `### Continuity` | responsibility | How time qualifies the obligation |
+| `### Criteria` | responsibility | What counts as satisfactory fulfillment |
+| `### Constraints` | responsibility | What must remain bounded or prohibited |
+| `### Fulfillment` | responsibility | Optional hint naming a system or service that may fulfill the responsibility |
+| `### Schedule` | gateway | Optional cron-like ingress cadence |
+| `### Receives` | gateway | Optional HTTP/event ingress description |
+| `### Emits` | gateway | Responsibility trigger id the gateway should emit |
+| `### Payload` | gateway | Notes about the event payload shape |
 
 Unknown `###` sections are preserved as documentation. They are not contract
 sections unless a future spec names them.
 
 ## File Extraction
 
-Forme parses a file in this order:
+Interpreters parse a file in this order:
 
 1. Read YAML frontmatter for identity metadata (`name`, `kind`; `kind: test`
    files also declare `subject`).
-2. Create the file-level service, system, test, or pattern from the frontmatter.
+2. Create the file-level service, system, gateway, test, pattern, or
+   responsibility from the frontmatter.
 3. Attach all `###` sections before the first `##` to the file-level entry.
 4. For every `## {name}` heading, create an inline service named `{name}`.
 5. Attach subsequent `###` sections to that inline service until the next `##`.
@@ -177,6 +224,43 @@ kind: system
 
 The file-level system requires `draft` and ensures `final`. It also
 contains inline services `review` and `polish`.
+
+## Responsibilities
+
+Responsibility-oriented repositories may contain `kind: responsibility` files:
+
+```markdown
+---
+name: qualified-stargazer-outreach
+kind: responsibility
+---
+
+### Goal
+
+High-intent GitHub stargazers are identified, enriched, and thoughtfully
+followed up with.
+
+### Continuity
+
+- New high-intent stargazers should not remain unattended for more than one
+  business day.
+- Outreach history should prevent duplicate contact without new evidence.
+
+### Criteria
+
+- Qualification includes GitHub activity, company context, and plausible pain.
+- Outreach includes a specific OpenProse program idea or sample result.
+
+### Constraints
+
+- Do not send generic outreach.
+- Keep enrichment and outreach costs bounded.
+```
+
+Responsibilities are semantic and normative. They do not directly define
+gateways, tests, schedules, listeners, queues, or implementation steps.
+Load `responsibility-runtime.md` and `concepts/responsibility.md` for
+responsibility semantics.
 
 ## Services
 
@@ -310,13 +394,13 @@ Scoping) for the on-disk format of memory files.
 
 ## Frontmatter
 
-Every service, system, test, or pattern declares identity with `name` and
-`kind`:
+Every service, system, gateway, test, pattern, or responsibility declares
+identity with `name` and `kind`:
 
 ```yaml
 ---
 name: entry-name
-kind: service | system | test | pattern
+kind: service | system | gateway | test | pattern | responsibility
 ---
 ```
 
@@ -361,7 +445,8 @@ When an entry's type is `run` or `run[]`, the caller supplies a run ID (or a
 list of them). The Prose VM resolves each ID to its run directory and writes a
 structured binding at `bindings/caller/{name}.md` containing the run ID, path,
 root source name, and status. The service reads that binding and then reaches into
-the run's own `bindings/`, `vm.log.md`, and `manifest.run.md` directly.
+the run's own `bindings/`, `vm.log.md`, and compiled activation manifest
+directly.
 
 See `prose.md` (Run-Typed Inputs) for binding format, resolution order (bare
 ID, `~/{id}` for user scope, absolute path), and staleness validation.
@@ -431,5 +516,5 @@ Use Contract Markdown when the author cares about the promise more than the
 choreography. Use ProseScript when the author needs exact order, control flow,
 or human-readable procedural steps.
 
-For canonical service, system, pattern, test, memory, and security guidance,
-load `guidance/authoring.md`.
+For canonical service, system, gateway, pattern, test, memory, and security
+guidance, load `guidance/authoring.md`.

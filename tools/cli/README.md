@@ -2,11 +2,12 @@
 
 Official shell entrypoint for OpenProse commands. The CLI turns invocations like
 `prose run std/evals/inspector` into canonical OpenProse agent-session prompts,
-then streams the selected harness output back to the terminal.
+then streams the selected harness output back to the terminal. It also hosts
+deterministic runtime commands such as `prose serve`.
 
 The CLI does not replace the OpenProse VM or execute services or systems by
-itself. The selected harness still runs the prompt, loads the OpenProse
-skill/specs, spawns agents when available, and writes run state.
+itself. For `prose run`, the selected harness still runs the prompt, loads the
+OpenProse skill/specs, spawns agents when available, and writes run state.
 
 ## Requirements
 
@@ -33,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/openprose/prose/main/tools/cli/inst
 From a repository checkout:
 
 ```bash
-cd cli
+cd tools/cli
 npm ci
 npm run build
 npm link
@@ -43,7 +44,7 @@ prose --help
 For project-local use:
 
 ```bash
-npm install --save-dev ../path/to/prose/cli
+npm install --save-dev ../path/to/prose/tools/cli
 npx prose run std/evals/inspector
 ```
 
@@ -140,15 +141,28 @@ root docs. `prose help` is local CLI help; use `prose --help` or
 `prose help <command>` to inspect shell usage.
 
 ```bash
-prose run systems/reviewer.prose.md
+prose compile
+prose compile src/responsibilities --out dist
+cp dist/manifest.next.json dist/manifest.active.json
+prose serve
+prose run src/systems/reviewer.prose.md
 prose run co/systems/company-repo-checker --harness claude-sdk
 prose upgrade
 prose upgrade --dry-run
 prose doctor
-prose lint systems/reviewer.prose.md
-prose preflight systems/reviewer.prose.md
-prose status --graph
+prose lint src/systems/reviewer.prose.md
+prose preflight src/systems/reviewer.prose.md
+prose status
 ```
+
+`prose compile` returns success only after the emitted `manifest.next.json`
+passes deterministic IR validation.
+
+`prose serve` loads and validates `dist/manifest.active.json` under the active
+OpenProse root, registers local cron and HTTP trigger adapters, and launches
+ordinary bounded `prose run` activations when those triggers fire. HTTP
+adapters bind to `127.0.0.1:7331` by default; use `--host` and `--port` to
+override that local listener.
 
 ## Development
 

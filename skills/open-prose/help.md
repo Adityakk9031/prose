@@ -24,16 +24,18 @@ Header: "Goal"
 Options:
   1. "Run a service/system" - "I have a service or system file to execute"
   2. "Build something new" - "Help me create a service or system for a specific task"
-  3. "Learn the syntax" - "Show me examples and explain how it works"
-  4. "Explore possibilities" - "What can OpenProse do?"
+  3. "Keep a goal true" - "Define a standing goal with compile/serve/status"
+  4. "Learn the syntax" - "Show me examples and explain how it works"
+  5. "Explore possibilities" - "What can OpenProse do?"
 ```
 
 **After the user responds:**
 
 - **Run a service/system**: Ask for the file path, then load `prose.md` and execute
 - **Build something new**: Ask them to describe their task, then help write a service or system (load `guidance/authoring.md`)
+- **Keep a goal true**: Help author a `kind: responsibility`, then explain `prose compile`, `prose serve`, and `prose status`
 - **Learn the syntax**: Show examples from `examples/`, explain the VM model
-- **Explore possibilities**: Walk through key examples like `37-the-forge/`
+- **Explore possibilities**: Walk through examples like `stargazer-outreach/`
 
 ---
 
@@ -41,16 +43,18 @@ Options:
 
 | Command | What it does |
 |---------|--------------|
+| `prose compile [path] [--out <dir>]` | Compile source into `<openprose-root>/dist/manifest.next.json` |
+| `prose serve` | Serve the active IR as local cron and HTTP trigger adapters |
 | `prose run <file.prose.md>` | Run a service or system |
 | `prose lint <file.prose.md>` | Validate structure, schema, and contracts |
 | `prose preflight <file.prose.md>` | Check dependencies and environment |
 | `prose test <test.prose.md>` | Run tests with assertions |
 | `prose inspect <run-id>` | Evaluate a completed run |
-| `prose status` | Show recent runs |
-| `prose install` | Install dependencies from `use` statements into `.agents/prose/deps/` |
+| `prose status` | Show active IR, diagnostics, trigger plan, recent runs, and responsibility status/pressure |
+| `prose install` | Install dependencies from `use` statements into `<openprose-root>/deps/` |
 | `prose install --update` | Update pinned dependencies to latest |
-| `prose upgrade --dry-run` | Inspect old structures and report the migration plan |
-| `prose upgrade` | Migrate old structures to current conventions |
+| `prose upgrade --dry-run` | Inspect files and report the migration plan |
+| `prose upgrade` | Apply the migration plan |
 | `prose help` | This help -- guides you to what you need |
 | `prose examples` | Browse and run example systems |
 
@@ -60,7 +64,10 @@ Options:
 
 **Run an example:**
 ```
-prose run examples/01-hello-world.prose.md
+cd examples/stargazer-outreach
+prose compile
+cp dist/manifest.next.json dist/manifest.active.json
+prose serve
 ```
 
 **Create your first service or system:**
@@ -70,9 +77,9 @@ prose help
 -> Describe what you want to automate
 ```
 
-Default project source lives under `.agents/prose/src/`. Multi-file systems
-conventionally start at `.agents/prose/src/{system}/index.prose.md`; runs are
-written to `.agents/prose/runs/`.
+Default project source lives under `<openprose-root>/src/`. Multi-file systems
+conventionally start at `<openprose-root>/src/{system}/index.prose.md`; runs are
+written to `<openprose-root>/runs/`.
 
 **Use a library service or system:**
 ```text
@@ -119,7 +126,7 @@ We started with YAML. The problem: loops, conditionals, and variable declaration
 
 ### How do dependencies work?
 
-OpenProse uses a git-native dependency model -- any git host works, written explicitly as `host/owner/repo/path` (e.g. `github.com/alice/research`). A system can reference dependencies with `use "host/owner/repo/path"`, dependency-like entries in `### Services`, or `pattern:` references. Run `prose install` to clone dependencies into `.agents/prose/deps/` and pin their versions in `.agents/prose/prose.lock`. The lockfile is committed to git; `.agents/prose/deps/` is gitignored (it's a cache, reproducible from the lockfile). `std/` is shorthand for `github.com/openprose/prose/packages/std/` (the standard library) and `co/` is shorthand for `github.com/openprose/prose/packages/co/` (company-as-prose). At runtime, dependencies are read from disk only -- no network calls. If deps are missing, `prose run` errors and tells you to run `prose install`.
+OpenProse uses a git-native dependency model -- any git host works, written explicitly as `host/owner/repo/path` (e.g. `github.com/alice/research`). A system can reference dependencies with `use "host/owner/repo/path"`, dependency-like entries in `### Services`, or `pattern:` references. Run `prose install` to clone dependencies into `<openprose-root>/deps/` and pin their versions in `<openprose-root>/prose.lock`. The lockfile is committed to git; `<openprose-root>/deps/` is gitignored (it's a cache, reproducible from the lockfile). `std/` is shorthand for `github.com/openprose/prose/packages/std/` (the standard library) and `co/` is shorthand for `github.com/openprose/prose/packages/co/` (company-as-prose). At runtime, dependencies are read from disk only -- no network calls. If deps are missing, `prose run` errors and tells you to run `prose install`.
 
 ### Why not LangChain/CrewAI/AutoGen?
 
@@ -145,7 +152,7 @@ Services and systems are `*.prose.md` files with tiny YAML identity frontmatter 
 ```yaml
 ---
 name: my-service
-kind: service          # service | system | test | pattern
+kind: service          # service | system | gateway | test | pattern | responsibility
 ---
 ```
 
@@ -282,26 +289,17 @@ Also valid: `session`, `agent`, `repeat`, `for`, `loop until`, `try/catch`, `if/
 
 ## Examples
 
-The `examples/` directory contains a mixture of canonical Contract Markdown,
-system patterns, and feature demos:
-
-| Range | Category |
-|-------|----------|
-| 01-04 | Basics -- single-service files (hello world, research, code review, write-and-refine) |
-| 09-13 | Agents, skills, imports, shape boundaries, variables |
-| 16 | Parallel execution (multi-service with synthesizer) |
-| 22-25 | Error handling, retry, choice blocks, conditionals |
-| 29-30 | Captain's chair pattern (persistent orchestrator) |
-| 32-37 | Production workflows (PR review, auto-fix, content pipeline, feature factory, bug hunter, the forge) |
-| 38-39 | Skill scanning, architect-by-simulation |
-| 40-43 | RLM patterns (self-refine, divide-conquer, filter-recurse, pairwise) |
-| 44-50 | Production and meta (UX testing, plugin release, workflow crystallizer, language self-improvement, habit miner, retrospective, interactive tutor) |
-| -- | Bonus: patterns-demo, multi-service-single-file, dependency-import, test-demo, wiring-declaration |
+The `examples/` directory contains small OpenProse Native Repositories. Each
+example has `src/`, `dist/`, `runs/`, `state/`, `deps/`, a top-level README,
+and source files for a responsibility, gateway, system, and focused services.
 
 **Recommended starting points:**
-- `01-hello-world.prose.md` -- Simplest possible service (single session, no inputs)
-- `16-parallel-reviews/` -- Multi-service parallel execution with auto-wiring
-- `37-the-forge/` -- Watch AI build a web browser (9-phase execution block)
-- `test-demo.prose.md` -- See how `kind: test` works with fixtures and assertions
-- `multi-service-single-file.prose.md` -- See `##` inline service boundaries
-- `patterns-demo/` -- See a self-contained worker-critic pattern
+
+- `stargazer-outreach/` -- GitHub stars to qualified, thoughtful outreach
+- `incident-briefing-room/` -- Incident updates, impact, and next actions
+- `customer-risk-radar/` -- Customer risk monitoring before renewals or escalations
+- `release-readiness/` -- Release evidence, risk, notes, and rollback context
+- `vendor-renewal-watch/` -- Renewal preparation before auto-renewal windows
+- `research-inbox-triage/` -- Deduplicated, prioritized research intake
+- `content-performance-loop/` -- Content performance lessons into next actions
+- `compliance-evidence-tracker/` -- Audit evidence freshness and gap tracking

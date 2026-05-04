@@ -1,6 +1,9 @@
 import { Command, Help as OclifHelp } from "@oclif/core";
 import { createForwardCommand, type ForwardCommandDefinition } from "./base.js";
+import Compile from "./compile.js";
 import Doctor from "./doctor.js";
+import Serve from "./serve.js";
+import Status from "./status.js";
 
 class Help extends Command {
 	static summary = "Show CLI help.";
@@ -48,11 +51,6 @@ const forwardCommandDefinitions = {
 		summary: "Run an OpenProse service or system.",
 		usage: "run <file.prose.md|package/handle> [inputs...] [--harness <name>]",
 	},
-	status: {
-		command: "status",
-		summary: "Show OpenProse status.",
-		usage: "status [--graph] [--harness <name>]",
-	},
 	test: {
 		command: "test",
 		summary: "Run OpenProse tests.",
@@ -60,14 +58,17 @@ const forwardCommandDefinitions = {
 	},
 	upgrade: {
 		command: "upgrade",
-		summary: "Upgrade legacy Prose sources.",
+		summary: "Upgrade Prose source layout.",
 		usage: "upgrade [--dry-run] [--harness <name>]",
 	},
 } satisfies Record<string, ForwardCommandDefinition>;
 
 const commands = {
+	compile: Compile,
 	doctor: Doctor,
 	help: Help,
+	serve: Serve,
+	status: Status,
 	...Object.fromEntries(
 		Object.entries(forwardCommandDefinitions).map(([name, definition]) => [name, createForwardCommand(definition)]),
 	),

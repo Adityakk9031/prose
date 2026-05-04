@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	isDirectEntrypoint,
@@ -9,7 +9,12 @@ import {
 	runForwardedProseCommand,
 	splitHarnessArgs,
 } from "../../src/index.js";
+import commands from "../../src/commands/index.js";
+import { runCompileCommand } from "../../src/commands/compile.js";
 import type { Harness } from "../../src/harnesses/index.js";
+
+const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
+const stargazerFixture = join(repoRoot, "tests/open-prose/compiler/expected/stargazer.manifest.next.json");
 
 function memoryStreams() {
 	let stdout = "";
@@ -30,6 +35,14 @@ function memoryStreams() {
 }
 
 describe("Oclif entrypoint helpers", () => {
+	it("registers serve as a local runtime command", () => {
+		expect(commands.serve).toBeDefined();
+	});
+
+	it("registers status as a local runtime command", () => {
+		expect(commands.status).toBeDefined();
+	});
+
 	it("matches symlinked argv paths by real path", () => {
 		const temp = mkdtempSync(join(tmpdir(), "prose-direct-"));
 
@@ -118,6 +131,31 @@ describe("runForwardedProseCommand", () => {
 		expect(seen).toEqual(["prose run './flows/needs review.prose.md' --topic 'two words'", "/repo", "secret"]);
 		expect(io.stdout).toBe("out");
 		expect(io.stderr).toBe("err");
+	});
+
+	it("forwards compile prompts through the selected harness", async () => {
+		const io = memoryStreams();
+		const seen: string[] = [];
+		const harness: Harness = {
+			name: "mock",
+			async run(prompt) {
+				seen.push(prompt);
+				return 0;
+			},
+		};
+
+		const exitCode = await runForwardedProseCommand({
+			command: "compile",
+			argv: [".", "--out", "dist", "--harness", "mock"],
+			cwd: "/repo",
+			env: {},
+			stdout: io.streams.stdout,
+			stderr: io.streams.stderr,
+			harnessFactory: () => harness,
+		});
+
+		expect(exitCode).toBe(0);
+		expect(seen).toEqual(["prose compile . --out dist"]);
 	});
 
 	it("loads OpenProse skill bootstrap after preflight and passes it to the harness", async () => {
@@ -252,5 +290,101 @@ FORWARDED_BOOTSTRAP_SENTINEL
 		).rejects.toThrow("Missing required argument");
 
 		expect(preflightCalled).toBe(false);
+	});
+});
+
+describe("runCompileCommand", () => {
+	it("validates the manifest emitted by the intelligent compiler", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-compile-valid-"));
+		const io = memoryStreams();
+
+		try {
+			const exitCode = await runCompileCommand({
+				argv: [".", "--harness", "mock"],
+				cwd: temp,
+				env: {},
+				stdout: io.streams.stdout,
+				stderr: io.streams.stderr,
+				skillBootstrap: false,
+				skillPreflight: false,
+				harnessFactory: () => ({
+					name: "mock",
+					async run() {
+						mkdirSync(join(temp, "dist"), { recursive: true });
+						copyFileSync(stargazerFixture, join(temp, "dist/manifest.next.json"));
+						return 0;
+					},
+				}),
+			});
+
+			expect(exitCode).toBe(0);
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects successful compiler runs that do not emit valid IR", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-compile-invalid-"));
+		const io = memoryStreams();
+
+		try {
+			await expect(
+				runCompileCommand({
+					argv: ["--harness", "mock"],
+					cwd: temp,
+					env: {},
+					stdout: io.streams.stdout,
+					stderr: io.streams.stderr,
+					skillBootstrap: false,
+					skillPreflight: false,
+					harnessFactory: () => ({
+						name: "mock",
+						async run() {
+							mkdirSync(join(temp, "dist"), { recursive: true });
+							writeFileSync(join(temp, "dist/manifest.next.json"), JSON.stringify({ kind: "openprose.repository-ir" }));
+							return 0;
+						},
+					}),
+				}),
+			).rejects.toMatchObject({
+				name: "CompileValidationError",
+				details: expect.arrayContaining(["version must be 0"]),
+			});
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects successful compiler runs that leave stale valid IR behind", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-compile-stale-"));
+		const io = memoryStreams();
+
+		try {
+			mkdirSync(join(temp, "dist"), { recursive: true });
+			copyFileSync(stargazerFixture, join(temp, "dist/manifest.next.json"));
+
+			await expect(
+				runCompileCommand({
+					argv: ["--harness", "mock"],
+					cwd: temp,
+					env: {},
+					stdout: io.streams.stdout,
+					stderr: io.streams.stderr,
+					skillBootstrap: false,
+					skillPreflight: false,
+					harnessFactory: () => ({
+						name: "mock",
+						async run() {
+							return 0;
+						},
+					}),
+				}),
+			).rejects.toMatchObject({
+				name: "CompileValidationError",
+				message: "Compiled repository IR was not written to dist/manifest.next.json.",
+			});
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
 	});
 });
