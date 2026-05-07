@@ -15,6 +15,7 @@ type SmokeCase = {
   source: string;
   workspaceSources?: string[];
   inputs?: Record<string, string>;
+  expectedArtifacts?: string[];
   expectedOutputs?: string[];
   timeoutSeconds?: number;
   maxTurns?: number;
@@ -47,6 +48,7 @@ type CaseResult = {
   durationMs: number;
   workspace: string;
   reasons: string[];
+  expectedArtifacts: string[];
   expectedOutputs: string[];
   foundOutputs: string[];
   exitCode: number | null;
@@ -78,6 +80,7 @@ const DEFAULT_WORKSPACE_ROOT = "/tmp/openprose-smoke";
 const DEFAULT_MODEL = process.env.OPENPROSE_SMOKE_MODEL ?? "claude-sonnet-4-6";
 const DEFAULT_TIMEOUT_SECONDS = 360;
 const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_EXPECTED_ARTIFACTS = ["root.prose.md", "vm.log.md"] as const;
 const RUNS_DIR_SEGMENTS = ["runs"] as const;
 const CLAUDE_TOOLS = "Edit,Read,Write,Glob,Grep,Task,Skill";
 const CLAUDE_DISALLOWED_TOOLS = [
@@ -494,6 +497,9 @@ function validateCase(entry: any, index: number): SmokeCase {
   if (entry.expectedOutputs !== undefined && !isStringArray(entry.expectedOutputs)) {
     throw new Error(`Smoke case ${entry.id} expectedOutputs must be a string array`);
   }
+  if (entry.expectedArtifacts !== undefined && !isRunArtifactArray(entry.expectedArtifacts)) {
+    throw new Error(`Smoke case ${entry.id} expectedArtifacts must be run artifact filenames`);
+  }
   if (entry.workspaceSources !== undefined && !isStringArray(entry.workspaceSources)) {
     throw new Error(`Smoke case ${entry.id} workspaceSources must be a string array`);
   }
@@ -517,6 +523,7 @@ function validateCase(entry: any, index: number): SmokeCase {
     source: entry.source,
     workspaceSources,
     inputs: entry.inputs,
+    expectedArtifacts: entry.expectedArtifacts ?? [...DEFAULT_EXPECTED_ARTIFACTS],
     expectedOutputs: entry.expectedOutputs ?? [],
     timeoutSeconds: entry.timeoutSeconds,
     maxTurns: entry.maxTurns,
@@ -534,6 +541,21 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string" && entry.trim());
+}
+
+function isRunArtifactArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        typeof entry === "string" &&
+        entry.trim() &&
+        entry === path.basename(entry) &&
+        !entry.includes(path.sep) &&
+        !entry.includes("/") &&
+        !entry.includes("\\"),
+    )
+  );
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -562,6 +584,7 @@ async function runCase(
   manifestDir: string,
 ): Promise<CaseResult> {
   const start = Date.now();
+  const expectedArtifacts = smokeCase.expectedArtifacts ?? [...DEFAULT_EXPECTED_ARTIFACTS];
   const expectedOutputs = smokeCase.expectedOutputs ?? [];
   const caseResultsDir = path.join(resultsDir, "cases", smokeCase.id);
   const stdoutPath = path.join(caseResultsDir, "stdout.txt");
@@ -625,6 +648,7 @@ async function runCase(
     durationMs: Date.now() - start,
     workspace,
     reasons: classification.reasons,
+    expectedArtifacts,
     expectedOutputs,
     foundOutputs: classification.foundOutputs,
     exitCode,
@@ -693,7 +717,9 @@ function buildPrompt(smokeCase: SmokeCase): string {
       ? inputs.map(([name, value]) => `- ${name}: ${value}`).join("\n")
       : "- No caller inputs are declared.";
   const expectedOutputs = smokeCase.expectedOutputs ?? [];
+  const expectedArtifacts = smokeCase.expectedArtifacts ?? [...DEFAULT_EXPECTED_ARTIFACTS];
   const outputs = expectedOutputs.join(", ") || "(none declared)";
+  const artifacts = expectedArtifacts.join(", ") || "(none declared)";
   const artifactBlock =
     expectedOutputs.length > 0
       ? expectedOutputs
@@ -714,7 +740,7 @@ function buildPrompt(smokeCase: SmokeCase): string {
     ...commandGuidance,
     "Use the default filesystem state backend unless the source explicitly requests another backend.",
     "Satisfy the open-prose Run State Gate before reporting success.",
-    "The run must create runs/<run-id>/root.prose.md, runs/<run-id>/forme.manifest.json, and runs/<run-id>/vm.log.md.",
+    `The run must create these files directly under runs/<run-id>/: ${artifacts}.`,
     "The smoke runner checks real files, not stdout. Before replying, ensure each declared output is published as a non-empty binding file:",
     artifactBlock,
     "If a binding is missing, create it under the correct service binding directory before reporting success.",
@@ -791,6 +817,7 @@ async function classifyLiveCase(
 ): Promise<{ status: SmokeStatus; reasons: string[]; foundOutputs: string[] }> {
   const artifactReasons: string[] = [];
   const processReasons: string[] = [];
+  const expectedArtifacts = smokeCase.expectedArtifacts ?? [...DEFAULT_EXPECTED_ARTIFACTS];
   const expectedOutputs = smokeCase.expectedOutputs ?? [];
 
   if (timedOut) {
@@ -828,7 +855,7 @@ async function classifyLiveCase(
     artifactReasons.push("No run directory was created under <openprose-root>/runs.");
   }
   if (latestRunDir) {
-    for (const artifactName of ["forme.manifest.json", "root.prose.md", "vm.log.md"]) {
+    for (const artifactName of expectedArtifacts) {
       const artifactPath = path.join(latestRunDir, artifactName);
       const artifactStat = await statIfExists(artifactPath);
       if (!artifactStat?.isFile()) {
