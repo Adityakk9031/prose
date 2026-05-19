@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -232,6 +233,10 @@ describe("Oclif entrypoint helpers", () => {
 		expect(commands.status).toBeDefined();
 	});
 
+	it("registers write as a forwarded authoring command", () => {
+		expect(commands.write).toBeDefined();
+	});
+
 	it("matches symlinked argv paths by real path", () => {
 		const temp = mkdtempSync(join(tmpdir(), "prose-direct-"));
 
@@ -347,6 +352,86 @@ describe("runForwardedProseCommand", () => {
 		expect(seen).toEqual(["prose compile . --out dist"]);
 	});
 
+	it("forwards write prompts to the prose-author system through the selected harness", async () => {
+		const io = memoryStreams();
+		const seen: string[] = [];
+		const harness: Harness = {
+			name: "mock",
+			async run(prompt) {
+				seen.push(prompt);
+				return 0;
+			},
+		};
+
+		const exitCode = await runForwardedProseCommand({
+			command: "write",
+			argv: ["draft", "release", "readiness", "--harness", "mock"],
+			cwd: "/repo",
+			env: {},
+			stdout: io.streams.stdout,
+			stderr: io.streams.stderr,
+			harnessFactory: () => harness,
+		});
+
+		expect(exitCode).toBe(0);
+		expect(seen).toEqual([
+			"prose write output_mode: source-package-only apply: false run_state: in-context terminal_summary: required interactive: false request: 'draft release readiness'",
+		]);
+	});
+
+	it("uses piped stdin as the write request when no argv request is provided", async () => {
+		const io = memoryStreams();
+		const seen: string[] = [];
+		const harness: Harness = {
+			name: "mock",
+			async run(prompt) {
+				seen.push(prompt);
+				return 0;
+			},
+		};
+
+		const exitCode = await runForwardedProseCommand({
+			command: "write",
+			argv: ["--harness", "mock"],
+			cwd: "/repo",
+			env: {},
+			stdin: Readable.from(["draft a release readiness responsibility\n"]),
+			stdout: io.streams.stdout,
+			stderr: io.streams.stderr,
+			harnessFactory: () => harness,
+		});
+
+		expect(exitCode).toBe(0);
+		expect(seen).toEqual([
+			"prose write output_mode: source-package-only apply: false run_state: in-context terminal_summary: required interactive: false request: 'draft a release readiness responsibility'",
+		]);
+	});
+
+	it("rejects write flags that would imply unsupported CLI interaction", async () => {
+		const io = memoryStreams();
+		let harnessCalled = false;
+
+		await expect(
+			runForwardedProseCommand({
+				command: "write",
+				argv: ["--interactive", "draft", "--harness", "mock"],
+				cwd: "/repo",
+				env: {},
+				stdout: io.streams.stdout,
+				stderr: io.streams.stderr,
+				harnessFactory: () => ({
+					name: "mock",
+					async run() {
+						harnessCalled = true;
+						return 0;
+					},
+				}),
+			}),
+		).rejects.toThrow("does not support interactive flags");
+
+		expect(harnessCalled).toBe(false);
+	});
+
 	it("loads OpenProse skill bootstrap after preflight and passes it to the harness", async () => {
 		const home = mkdtempSync(join(tmpdir(), "prose-home-"));
 		const cwd = mkdtempSync(join(tmpdir(), "prose-cwd-"));
@@ -398,7 +483,8 @@ FORWARDED_BOOTSTRAP_SENTINEL
 			expect(seen[0]?.prompt).toContain("prose run flow.prose.md");
 			expect(seen[0]?.additionalDirectories).toEqual([skillRoot]);
 			expect(seen[0]?.systemPromptAppend).toContain("FORWARDED_BOOTSTRAP_SENTINEL");
-			expect(seen[0]?.systemPromptAppend).toContain(`OpenProse skill root: ${skillRoot}`);
+			expect(seen[0]?.systemPromptAppend).toContain(skillRoot);
+			expect(seen[0]?.systemPromptAppend).not.toContain("Bundled OpenProse source root:");
 		} finally {
 			rmSync(home, { recursive: true, force: true });
 			rmSync(cwd, { recursive: true, force: true });

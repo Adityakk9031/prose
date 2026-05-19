@@ -1,6 +1,7 @@
 export type CommandName =
 	| "compile"
 	| "run"
+	| "write"
 	| "lint"
 	| "preflight"
 	| "test"
@@ -24,6 +25,7 @@ export class CommandModelError extends Error {
 export const supportedCommands = [
 	"compile",
 	"run",
+	"write",
 	"lint",
 	"preflight",
 	"test",
@@ -38,6 +40,7 @@ export const supportedCommands = [
 const usageByCommand: Record<CommandName, string> = {
 	compile: "prose compile [path] [--out <dir>]",
 	run: "prose run <file.prose.md|package/handle> [inputs...]",
+	write: "prose write [request...]",
 	lint: "prose lint <file.prose.md>",
 	preflight: "prose preflight <file.prose.md>",
 	test: "prose test <path>",
@@ -51,6 +54,24 @@ const usageByCommand: Record<CommandName, string> = {
 
 export function canonicalPrompt(command: CommandName, args: readonly string[]): string {
 	validate(command, args);
+	if (command === "write") {
+		return shellJoin([
+			"prose",
+			"write",
+			"output_mode:",
+			"source-package-only",
+			"apply:",
+			"false",
+			"run_state:",
+			"in-context",
+			"terminal_summary:",
+			"required",
+			"interactive:",
+			"false",
+			"request:",
+			parseWriteRequest(args),
+		]);
+	}
 	return shellJoin(["prose", command, ...args]);
 }
 
@@ -68,6 +89,9 @@ function validate(command: CommandName, args: readonly string[]): void {
 			if (args[0]?.endsWith(".prose") || (args[0]?.endsWith(".md") && !args[0].endsWith(".prose.md"))) {
 				fail(command, `Expected <file.prose.md|package/handle> for 'prose run', got '${args[0]}'.`);
 			}
+			return;
+		case "write":
+			requireNonBlankWriteRequest(command, args);
 			return;
 		case "test":
 			requireExactlyOne(command, args, "<path>");
@@ -108,6 +132,35 @@ function requireAtLeastOne(command: CommandName, args: readonly string[], label:
 	if (args.length === 0) {
 		fail(command, `Missing required argument ${label} for 'prose ${command}'.`);
 	}
+}
+
+function requireNonBlankWriteRequest(command: "write", args: readonly string[]): void {
+	if (parseWriteRequest(args).trim() === "") {
+		fail(command, "Missing request text for 'prose write'. Pass text arguments or pipe stdin.");
+	}
+}
+
+function parseWriteRequest(args: readonly string[]): string {
+	const requestParts: string[] = [];
+	let literalRequest = false;
+
+	for (const arg of args) {
+		if (!literalRequest && arg === "--") {
+			literalRequest = true;
+			continue;
+		}
+
+		if (!literalRequest && (arg === "--interactive" || arg === "--no-interactive")) {
+			fail(
+				"write",
+				"'prose write' does not support interactive flags. Pass all authoring context in argv/stdin, or run prose-author from a host that supports ask_user.",
+			);
+		}
+
+		requestParts.push(arg);
+	}
+
+	return requestParts.join(" ");
 }
 
 function requireExactlyOne(command: CommandName, args: readonly string[], label: string): void {
