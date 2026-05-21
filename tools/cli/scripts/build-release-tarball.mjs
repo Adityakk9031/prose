@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const cliDir = resolve(scriptDir, "..");
+const repoRoot = resolve(cliDir, "..", "..");
 
 const usage = `Usage: node scripts/build-release-tarball.mjs [options]
 
@@ -162,6 +163,7 @@ async function main() {
 
 	const packageJsonPath = join(cliDir, "package.json");
 	const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+	const workspaceDependencyVersions = await readWorkspaceDependencyVersions();
 	const version = options.version ?? packageJson.version;
 	if (options.version !== undefined && options.version !== packageJson.version) {
 		throw new Error(`--version (${options.version}) must match package.json version (${packageJson.version})`);
@@ -205,12 +207,14 @@ async function main() {
 	try {
 		await mkdir(stageRoot, { recursive: true });
 		await cp(join(cliDir, "dist"), join(stageRoot, "dist"), { recursive: true });
-		await cp(packageJsonPath, join(stageRoot, "package.json"));
-
-		const packageLockPath = join(cliDir, "package-lock.json");
-		if (existsSync(packageLockPath)) {
-			await cp(packageLockPath, join(stageRoot, "package-lock.json"));
-		}
+		await writeFile(
+			join(stageRoot, "package.json"),
+			`${JSON.stringify(
+				normalizePackageJsonForReleaseArchive(packageJson, workspaceDependencyVersions),
+				null,
+				2,
+			)}\n`,
+		);
 
 		const readmePath = join(cliDir, "README.md");
 		if (existsSync(readmePath)) {
@@ -233,11 +237,7 @@ async function main() {
 			...npmTargetArgs(targetOs, targetArch),
 		];
 
-		if (existsSync(join(stageRoot, "package-lock.json"))) {
-			run("npm", ["ci", ...productionInstallArgs], { cwd: stageRoot });
-		} else {
-			run("npm", ["install", ...productionInstallArgs], { cwd: stageRoot });
-		}
+		run("npm", ["install", ...productionInstallArgs], { cwd: stageRoot });
 
 		await mkdir(outDir, { recursive: true });
 		await rm(tarballPath, { force: true });
@@ -261,6 +261,47 @@ async function main() {
 			await rm(stageParent, { recursive: true, force: true });
 		}
 	}
+}
+
+async function readWorkspaceDependencyVersions() {
+	const packageJsonPaths = new Map([
+		["@openprose/reactor", join(repoRoot, "packages", "reactor", "package.json")],
+		["@openprose/reactor-cradle", join(repoRoot, "packages", "reactor-cradle", "package.json")],
+	]);
+	const versions = new Map();
+
+	for (const [name, path] of packageJsonPaths) {
+		if (!existsSync(path)) {
+			continue;
+		}
+		const packageJson = JSON.parse(await readFile(path, "utf8"));
+		if (typeof packageJson.version !== "string") {
+			throw new Error(`${path} must include a version string.`);
+		}
+		versions.set(name, packageJson.version);
+	}
+
+	return versions;
+}
+
+function normalizePackageJsonForReleaseArchive(packageJson, workspaceDependencyVersions) {
+	const stagedPackageJson = JSON.parse(JSON.stringify(packageJson));
+	for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+		const dependencies = stagedPackageJson[section];
+		if (dependencies === undefined) {
+			continue;
+		}
+		for (const [name, version] of Object.entries(dependencies)) {
+			if (typeof version === "string" && version.startsWith("workspace:")) {
+				const resolvedVersion = workspaceDependencyVersions.get(name);
+				if (resolvedVersion === undefined) {
+					throw new Error(`Cannot resolve workspace dependency ${name} for release archive.`);
+				}
+				dependencies[name] = resolvedVersion;
+			}
+		}
+	}
+	return stagedPackageJson;
 }
 
 main().catch((error) => {

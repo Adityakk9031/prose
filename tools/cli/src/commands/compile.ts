@@ -1,6 +1,6 @@
 import { Command } from "@oclif/core";
-import { readFile, unlink } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { dirname, relative, resolve, sep } from "node:path";
 import type { Harness, WritableStreamLike } from "../harnesses/types.js";
 import {
 	CommandModelError,
@@ -29,6 +29,7 @@ import {
 	hasMarkdownSection,
 	parseDeclaredTools,
 } from "../tools/declared.js";
+import { compileRepositorySource } from "../prose/repository-source-compiler.js";
 
 export class CompileValidationError extends Error {
 	readonly details: string[];
@@ -174,6 +175,7 @@ export async function runCompileCommand(options: RunCompileCommandOptions): Prom
 		return exitCode;
 	}
 
+	await writeSourceCompiledRepositoryIrIfMissing(target);
 	await validateCompiledRepositoryIr({
 		argv: options.argv,
 		cwd: options.cwd,
@@ -181,6 +183,32 @@ export async function runCompileCommand(options: RunCompileCommandOptions): Prom
 		...target,
 	});
 	return 0;
+}
+
+async function writeSourceCompiledRepositoryIrIfMissing(target: CompiledManifestTarget): Promise<void> {
+	if (await pathExists(target.absoluteManifestPath)) {
+		return;
+	}
+
+	const result = await compileRepositorySource({
+		openProseRootPath: target.openProseRootPath,
+		absoluteSourcePath: target.absoluteSourcePath,
+	});
+	if (result.sourceCount === 0 || result.manifest === undefined) {
+		return;
+	}
+
+	await mkdir(dirname(target.absoluteManifestPath), { recursive: true });
+	await writeFile(target.absoluteManifestPath, `${JSON.stringify(result.manifest, null, 2)}\n`);
+}
+
+async function pathExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 async function shouldAcceptNonzeroCompiledManifest(

@@ -5,6 +5,7 @@ import type { WritableStreamLike } from "../harnesses/types.js";
 import { millisecondsUntilNextCron, nextCronDate } from "./repository-cron.js";
 import {
 	dispatchRepositoryServeEvent,
+	dispatchPendingPressureActivations,
 	formatRepositoryServeSummary,
 	formatTriggerRegistration,
 	prepareRepositoryServe,
@@ -13,6 +14,7 @@ import {
 	type LoadActiveRepositoryIrOptions,
 	type RepositoryServeDispatchResult,
 	type RepositoryServeEvent,
+	type RepositoryServeReactorOptions,
 	type RepositoryServeSummary,
 	type RepositoryServeTriggerRegistration,
 } from "./repository-serve.js";
@@ -37,6 +39,7 @@ export interface RepositoryServeDaemonOptions extends LoadActiveRepositoryIrOpti
 	stderr: WritableStreamLike;
 	stdout: WritableStreamLike;
 	now?: () => Date;
+	reactor?: RepositoryServeReactorOptions;
 	timerScheduler?: RepositoryServeTimerScheduler;
 }
 
@@ -85,6 +88,7 @@ export async function startRepositoryServeDaemon(
 				stdout: options.stdout,
 				...(options.signal === undefined ? {} : { signal: options.signal }),
 			},
+			...(options.reactor === undefined ? {} : { reactor: options.reactor }),
 		});
 		track(dispatch, inflight);
 		return dispatch;
@@ -134,6 +138,22 @@ export async function startRepositoryServeDaemon(
 		options.stdout.write("No live cron or HTTP triggers registered.\n");
 	}
 	options.stdout.write("OpenProse serve is running. Stop with Ctrl-C.\n");
+
+	const pendingPressureDispatches = dispatchPendingPressureActivations({
+		loaded: summary.loaded,
+		run: {
+			commandRunner: options.commandRunner,
+			cwd: options.cwd,
+			env: options.env,
+			stderr: options.stderr,
+			stdout: options.stdout,
+			...(options.signal === undefined ? {} : { signal: options.signal }),
+		},
+	}).catch((error) => {
+		const message = error instanceof Error ? error.message : String(error);
+		options.stderr.write(`Pending pressure dispatch failed: ${message}\n`);
+	});
+	track(pendingPressureDispatches, inflight);
 
 	let resolveClosed!: () => void;
 	const closedPromise = new Promise<void>((resolve) => {

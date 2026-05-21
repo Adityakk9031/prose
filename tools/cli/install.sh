@@ -152,7 +152,7 @@ node_major=$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null |
 case "$node_major" in
 	""|*[!0-9]*) fail "unable to determine Node.js version" ;;
 esac
-[ "$node_major" -ge 18 ] || fail "Node.js 18 or newer is required"
+[ "$node_major" -ge 20 ] || fail "Node.js 20 or newer is required"
 
 if command -v curl >/dev/null 2>&1; then
 	download_command=curl

@@ -10,7 +10,7 @@ kind: service
 Apply the local Matt Pocock `grill-with-docs` skill to challenge the
 feature brief and surface the decision tree. Pocock's grilling is
 interactive by design ("ask the questions one at a time, waiting for
-feedback on each question"); in this auto-pocock pipeline, this subagent
+feedback on each question"); in this auto-pocock pipeline, this service
 recommends answers grounded in repository evidence rather than asking the
 user. Decision-making is split out into `decide-plan` as a separate
 service so the recommend-vs-decide boundary is explicit.

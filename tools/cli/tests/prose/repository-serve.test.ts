@@ -3,6 +3,13 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+	POLICY_ARTIFACT_VERSION,
+	POLICY_AUTHOR_HISTORY_QUERY_SCHEMA,
+	type ReactorAgentRequestV0,
+	type ReactorAgentSdkAdapterV0,
+	type ReactorModelGatewayAdapterV0,
+} from "@openprose/reactor";
 
 import {
 	ACTIVE_REPOSITORY_IR_PATH,
@@ -13,6 +20,7 @@ import {
 	buildActivationRunRequest,
 	buildPressureActivationRunRequest,
 	buildPressureFromStatus,
+	buildReactorPolicyNamespace,
 	buildTriggerRegistrationPlan,
 	dispatchRepositoryServeEvent,
 	fingerprintResponsibility,
@@ -32,6 +40,8 @@ import {
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const stargazerFixture = join(repoRoot, "tests/open-prose/compiler/expected/stargazer.manifest.next.json");
+const stargazerResponsibilityId = "067NC4KG01RG50R40M30E20918";
+const stargazerCronTriggerId = "high-intent-stargazer-outreach.periodic-check";
 
 function writeActiveManifest(temp: string, source = stargazerFixture): void {
 	const activePath = join(temp, ACTIVE_REPOSITORY_IR_PATH);
@@ -600,6 +610,61 @@ describe("repository serve core", () => {
 		}
 	});
 
+	it("dispatches cron events through Reactor receipts when adapters are supplied", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-serve-dispatch-reactor-"));
+		const io = memoryStreams();
+		const calls: string[] = [];
+
+		try {
+			writeActiveManifest(temp);
+			const loaded = await loadActiveRepositoryIr({ cwd: temp });
+
+			const result = await dispatchRepositoryServeEvent({
+				loaded,
+				event: {
+					triggerId: stargazerCronTriggerId,
+				},
+				reactor: {
+					modelGateway: makeModelGateway("down"),
+					agentSdk: makePolicyAuthorAgent(),
+					clock: { now: () => "2026-05-19T12:00:00.000Z" },
+				},
+				run: {
+					env: {},
+					stdout: io.streams.stdout,
+					stderr: io.streams.stderr,
+					commandRunner: async (options) => {
+						calls.push(options.env.PROSE_ACTIVATION_ID ?? "");
+						return 0;
+					},
+				},
+			});
+
+			expect(result.activationResults).toEqual([
+				{
+					activationId: "high-intent-stargazer-outreach.fulfillment",
+					exitCode: 0,
+					source: "pressure",
+				},
+			]);
+			expect(calls).toEqual(["high-intent-stargazer-outreach.fulfillment"]);
+			const receiptsPath = join(temp, `state/reactor/${stargazerResponsibilityId}/receipts.json`);
+			const receipts = JSON.parse(readFileSync(receiptsPath, "utf8")) as Array<{
+				cost: { surprise_cause?: string };
+				verdict: { status?: string };
+			}>;
+			expect(receipts).toHaveLength(1);
+			expect(receipts[0]?.cost.surprise_cause).toBe("real-input");
+			expect(receipts[0]?.verdict.status).toBe("down");
+			expect(readFileSync(join(temp, `state/responsibilities/${stargazerResponsibilityId}/pressure.latest.json`), "utf8")).toContain(
+				"surprise_cause=real-input",
+			);
+			expect(() => readFileSync(join(temp, `state/responsibilities/${stargazerResponsibilityId}/latest.json`), "utf8")).toThrow();
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
 	it("rejects judge runs that leave stale status behind", async () => {
 		const temp = mkdtempSync(join(tmpdir(), "prose-serve-stale-status-"));
 		const io = memoryStreams();
@@ -1017,6 +1082,57 @@ describe("repository serve core", () => {
 		}
 	});
 
+	it("routes live cron timers through Reactor receipts when adapters are supplied", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-serve-timer-reactor-"));
+		const io = memoryStreams();
+		let current = new Date(2026, 0, 1, 5, 59, 30);
+		const scheduled: Array<{ callback: () => void | Promise<void>; delayMs: number }> = [];
+		const scheduler: RepositoryServeTimerScheduler = {
+			setTimeout(callback, delayMs) {
+				scheduled.push({ callback, delayMs });
+				return { cancel() {} };
+			},
+		};
+		const calls: string[] = [];
+
+		try {
+			writeActiveManifest(temp);
+			const daemon = await startRepositoryServeDaemon({
+				cwd: temp,
+				env: {},
+				host: "127.0.0.1",
+				port: 0,
+				now: () => current,
+				reactor: {
+					modelGateway: makeModelGateway("down"),
+					agentSdk: makePolicyAuthorAgent(),
+					clock: { now: () => current.toISOString() },
+				},
+				stdout: io.streams.stdout,
+				stderr: io.streams.stderr,
+				timerScheduler: scheduler,
+				commandRunner: async (options) => {
+					calls.push(options.env.PROSE_ACTIVATION_ID ?? "");
+					return 0;
+				},
+			});
+
+			try {
+				expect(scheduled[0]?.delayMs).toBe(30_000);
+				current = new Date(2026, 0, 1, 6, 0, 0);
+				await scheduled[0]!.callback();
+				expect(calls).toEqual(["high-intent-stargazer-outreach.fulfillment"]);
+				expect(readFileSync(join(temp, `state/reactor/${stargazerResponsibilityId}/receipts.json`), "utf8")).toContain(
+					"real-input",
+				);
+			} finally {
+				await daemon.stop();
+			}
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
 	it("computes the next matching cron time", () => {
 		const from = new Date(2026, 0, 1, 5, 59, 30);
 		const friday = new Date(2026, 0, 2, 10, 0, 0);
@@ -1147,4 +1263,83 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
 		}
 		await new Promise((resolve) => setTimeout(resolve, 10));
 	}
+}
+
+function makeModelGateway(status: "up" | "drifting" | "down" | "blocked"): ReactorModelGatewayAdapterV0 {
+	return {
+		invoke: () => ({
+			payload: {
+				status,
+				confidence: {
+					value: 0.74,
+					derivation_method: "cli-serve-test",
+					label_source: "fixture",
+				},
+				cost_tags: {
+					tags: ["cli-serve"],
+				},
+			},
+			usage: {
+				provider: "cli-test",
+				model: "fixture-shallow-judge",
+				tokens: {
+					fresh: 13,
+					reused: 2,
+				},
+			},
+		}),
+	};
+}
+
+function makePolicyAuthorAgent(): ReactorAgentSdkAdapterV0 {
+	return {
+		launch: (request) => ({
+			payload: policyAuthorPayload(request),
+		}),
+	};
+}
+
+function policyAuthorPayload(request: ReactorAgentRequestV0): unknown {
+	const payload = request.payload as { readonly step?: string; readonly responsibility_id?: string };
+	if (payload.step === "history-query") {
+		return {
+			schema: POLICY_AUTHOR_HISTORY_QUERY_SCHEMA,
+			v: POLICY_ARTIFACT_VERSION,
+			selected_receipt_hashes: [],
+		};
+	}
+
+	const policyNamespace = buildReactorPolicyNamespace(payload.responsibility_id ?? stargazerResponsibilityId);
+	return {
+		registry_id: policyNamespace,
+		policy_revision: "1",
+		cadence: {
+			shallow_recheck_ms: 86_400_000,
+			plan_audit_ms: 604_800_000,
+			deep_revalidation_ms: 604_800_000,
+		},
+		hysteresis: {
+			min_recompile_interval_ms: 3_600_000,
+			enter_degraded_threshold: 0.8,
+			exit_degraded_threshold: 0.6,
+			warmup_judged_activations: 3,
+		},
+		thresholds: {
+			max_calibration_divergence_multiplier: 2,
+			escalation_precision_floor: 0.6,
+			backstop_deep_contradiction_count: 2,
+			stale_brief_minutes: 1_440,
+			fresh_tokens_per_day_ceiling: 50_000,
+		},
+		falsification_predicate: {
+			kind: "greater-than-or-equal",
+			fact: "cost.fresh_tokens_per_maintained_day",
+			value: 50_000,
+		},
+		backstop_divergence_predicate: {
+			kind: "greater-than-or-equal",
+			fact: "kernel.deep_shallow_contradiction_count_7d",
+			value: 2,
+		},
+	};
 }

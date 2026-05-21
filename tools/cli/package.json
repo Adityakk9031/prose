@@ -3,7 +3,7 @@
   "version": "0.14.0",
   "description": "Run OpenProse commands through first-party Codex and Claude agent SDKs.",
   "type": "module",
-  "packageManager": "npm@10.9.2",
+  "packageManager": "pnpm@9.15.0",
   "oclif": {
     "bin": "prose",
     "commands": {
@@ -66,13 +66,14 @@
     "prose"
   ],
   "engines": {
-    "node": ">=18.14.1"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.90",
     "@hono/node-server": "^1.19.14",
     "@oclif/core": "^4.10.6",
     "@openai/codex-sdk": "^0.125.0",
+    "@openprose/reactor": "workspace:*",
     "hono": "^4.12.16"
   },
   "devDependencies": {

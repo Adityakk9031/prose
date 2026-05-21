@@ -22,6 +22,7 @@ import {
 import commands from "../../src/commands/index.js";
 import { runCompileCommand } from "../../src/commands/compile.js";
 import type { Harness } from "../../src/harnesses/index.js";
+import { MOCK_COMPILE_MANIFEST_FIXTURE_ENV } from "../../src/harnesses/mock.js";
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const stargazerFixture = join(repoRoot, "tests/open-prose/compiler/expected/stargazer.manifest.next.json");
@@ -55,7 +56,7 @@ function writeManifestWithErrorDiagnostic(path: string): void {
 function writeResponsibilitySource(
 	root: string,
 	sourcePath = "src/daily-check.prose.md",
-	options: { id?: string; tools?: readonly string[] } = {},
+	options: { id?: string; tools?: readonly string[]; goal?: string } = {},
 ): string {
 	const file = join(root, sourcePath);
 	const tools = options.tools === undefined || options.tools.length === 0
@@ -72,7 +73,7 @@ id: ${options.id ?? dailyResponsibilityId}
 
 ### Goal
 
-The daily check is complete.
+${options.goal ?? "The daily check is complete."}
 
 ### Continuity
 
@@ -96,7 +97,7 @@ ${tools}
 
 function writeMinimalResponsibilityManifest(
 	path: string,
-	options: { id?: string; sourcePath?: string; tools?: Array<{ kind: "cli" | "mcp"; name: string }> } = {},
+	options: { id?: string; sourcePath?: string; tools?: Array<{ kind: "cli" | "mcp"; name: string }>; goal?: string } = {},
 ): void {
 	const responsibilityId = options.id ?? dailyResponsibilityId;
 	const sourcePath = options.sourcePath ?? "src/daily-check.prose.md";
@@ -112,7 +113,7 @@ function writeMinimalResponsibilityManifest(
 					{
 						id: responsibilityId,
 						sourcePath,
-						goal: "The daily check is complete.",
+						goal: options.goal ?? "The daily check is complete.",
 						continuity: ["Check every weekday."],
 						criteria: ["Evidence exists."],
 						constraints: ["Do not fabricate evidence."],
@@ -593,6 +594,39 @@ describe("runCompileCommand", () => {
 			});
 
 			expect(exitCode).toBe(0);
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps the mock manifest fixture as an explicit compile fallback", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-compile-fixture-fallback-"));
+		const io = memoryStreams();
+		const fixturePath = join(temp, "fixture.manifest.next.json");
+
+		try {
+			writeResponsibilitySource(temp, "src/daily-check.prose.md", {
+				goal: "The daily check came from source.",
+			});
+			writeMinimalResponsibilityManifest(fixturePath, {
+				goal: "The daily check came from the explicit fixture fallback.",
+			});
+
+			const exitCode = await runCompileCommand({
+				argv: ["src", "--harness", "mock"],
+				cwd: temp,
+				env: { [MOCK_COMPILE_MANIFEST_FIXTURE_ENV]: fixturePath },
+				stdout: io.streams.stdout,
+				stderr: io.streams.stderr,
+				skillBootstrap: false,
+				skillPreflight: false,
+			});
+
+			expect(exitCode).toBe(0);
+			const manifest = JSON.parse(readFileSync(join(temp, "dist/manifest.next.json"), "utf8")) as {
+				responsibilities: Array<{ goal: string }>;
+			};
+			expect(manifest.responsibilities[0]?.goal).toBe("The daily check came from the explicit fixture fallback.");
 		} finally {
 			rmSync(temp, { recursive: true, force: true });
 		}

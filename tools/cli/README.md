@@ -11,7 +11,7 @@ OpenProse skill/specs, spawns agents when available, and writes run state.
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20 or newer
 - Credentials for the selected provider
 - Codex SDK/OpenAI credentials for the default `codex-sdk` harness
 - `npx`, used by the CLI to install the `open-prose` skill when needed
@@ -34,9 +34,10 @@ curl -fsSL https://raw.githubusercontent.com/openprose/prose/main/tools/cli/inst
 From a repository checkout:
 
 ```bash
+cd /path/to/prose
+pnpm install
+pnpm --filter @openprose/prose-cli build
 cd tools/cli
-npm ci
-npm run build
 npm link
 prose --help
 ```
@@ -86,7 +87,7 @@ PROSE_HARNESS=claude-sdk prose run std/evals/inspector
 - `codex-sdk` uses `@openai/codex-sdk`, forwards the current working directory
   and environment, and streams Codex SDK events. This is the default.
 - `claude-sdk` uses `@anthropic-ai/claude-agent-sdk`, forwards the current
-  working directory and environment, and streams text deltas.
+  working directory and environment, and streams text chunks.
 - `mock` echoes prompts for tests and local smoke checks.
 
 Select a harness with `--harness <name>` or `PROSE_HARNESS`.
@@ -134,7 +135,7 @@ prose doctor --harness claude-sdk --install
 - Arguments after `--` are forwarded literally, including `--harness`.
 
 The tarball installer is intentionally a Node.js installer: the CLI package is
-JavaScript, so the installed shim executes Node.js 18 or newer. The script
+JavaScript, so the installed shim executes Node.js 20 or newer. The script
 verifies release checksums by default, rejects unsafe tar paths, symlinks,
 hardlinks, and special files, and writes the final shim atomically.
 
@@ -182,15 +183,20 @@ harness reports a stray nonzero status after writing a valid manifest, the CLI
 warns and accepts the validated artifact. Abort and signal exits are preserved.
 
 `prose serve` loads and validates `dist/manifest.active.json` under the active
-OpenProse root, registers local cron and HTTP trigger adapters, and launches
-ordinary bounded `prose run` activations when those triggers fire. HTTP
-adapters bind to `127.0.0.1:7331` by default; use `--host` and `--port` to
-override that local listener. The listener always exposes
-`/_openprose/health`, including cron-only manifests. Trigger routes respond
-with `202 Accepted` after the event is accepted; judge and fulfillment
-activations continue in the background and log failures to the serve process.
-During shutdown, in-flight activations interrupted by the serve process signal
-are reported as shutdown cancellations instead of trigger failures.
+OpenProse root, registers local cron and HTTP trigger adapters, and ingests
+those trigger events through `@openprose/reactor` receipts. The built-in local
+Reactor adapter is deterministic and labels its receipt usage as
+`openprose-cli-local` / `deterministic-shallow-v0`; it computes its own token
+estimate rather than borrowing token counts from the async run harness. Set
+`PROSE_REACTOR_LOCAL_STATUS=up|drifting|down|blocked` to force the local
+verdict for offline drills. HTTP adapters bind to `127.0.0.1:7331` by default;
+use `--host` and `--port` to override that local listener. The listener always
+exposes `/_openprose/health`, including cron-only manifests. Trigger routes
+respond with `202 Accepted` after the event is accepted; fulfillment, retry, or
+escalation activations launch only from Reactor-derived pressure and continue
+in the background. During shutdown, in-flight activations interrupted by the
+serve process signal are reported as shutdown cancellations instead of trigger
+failures.
 
 ## Development
 

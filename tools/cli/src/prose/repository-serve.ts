@@ -15,6 +15,7 @@ import {
 	validateRepositoryIr,
 } from "./repository-ir.js";
 import { resolveOpenProseRoot, type OpenProseRoot } from "./openprose-root.js";
+import { PROSE_FULFILLMENT_ARTIFACT_PATH_ENV } from "./fulfillment-artifact.js";
 import {
 	buildResponsibilityPressureRecord,
 	recordResponsibilityPressure,
@@ -23,11 +24,22 @@ import {
 	type ResponsibilityPressureRecordResult,
 } from "./responsibility-pressure.js";
 import {
+	claimResponsibilityPressureDispatch,
+	completeResponsibilityPressureDispatch,
+	readLatestResponsibilityPressure,
+} from "./responsibility-pressure-dispatch.js";
+import {
 	buildResponsibilityStatusPaths,
 	fingerprintResponsibility,
 	validateResponsibilityStatusRecord,
 } from "./responsibility-status.js";
 import type { ResponsibilityStatusRecord } from "./responsibility-status.js";
+import {
+	findRepositoryTriggerReceipt,
+	ingestRepositoryTriggerThroughReactor,
+	loadResponsibilityReactor,
+	type LoadResponsibilityReactorOptions,
+} from "./responsibility-reactor.js";
 
 export const OPENPROSE_JUDGE_SOURCE_PATH = "runtime/judge-responsibility.prose.md";
 
@@ -147,6 +159,8 @@ export interface RepositoryServeDispatchResult {
 	activationResults: RepositoryServeActivationResult[];
 }
 
+export type RepositoryServeReactorOptions = Omit<LoadResponsibilityReactorOptions, "loaded" | "responsibilityId">;
+
 interface RepositoryServeJudgeRequest {
 	request: RepositoryServeActivationRunRequest;
 	previousStatusText?: string;
@@ -264,12 +278,30 @@ export async function dispatchRepositoryServeEvent(options: {
 	loaded: RepositoryServeLoadedIr;
 	event: RepositoryServeEvent;
 	run: Omit<LaunchActivationRunOptions, "cwd"> & { cwd?: string };
+	reactor?: RepositoryServeReactorOptions;
 }): Promise<RepositoryServeDispatchResult> {
 	const resolvedActivations = resolveActivationsForEvent(options.loaded.manifest, options.event);
 	const activationResults: RepositoryServeActivationResult[] = [];
 	const launchedActivationIds = new Set<string>();
 	const judgeRequests: RepositoryServeJudgeRequest[] = [];
 	const cwd = options.run.cwd ?? options.loaded.openProseRoot.absolutePath;
+
+	if (options.reactor !== undefined) {
+		await dispatchRepositoryServeEventThroughReactor({
+			loaded: options.loaded,
+			event: options.event,
+			run: options.run,
+			reactor: options.reactor,
+			cwd,
+			activationResults,
+			launchedActivationIds,
+		});
+
+		return {
+			triggerId: options.event.triggerId,
+			activationResults,
+		};
+	}
 
 	for (const resolved of resolvedActivations) {
 		const request = buildActivationRunRequest({
@@ -319,19 +351,23 @@ export async function dispatchRepositoryServeEvent(options: {
 			loaded: options.loaded,
 			pressure: pressureResult.record,
 		});
-		const exitCode = await launchActivationRun(pressureRequest, {
-			...options.run,
+		const pressureActivation = await launchPressureActivationOnce({
+			loaded: options.loaded,
+			pressure: pressureResult.record,
+			request: pressureRequest,
+			run: options.run,
 			cwd,
 		});
-		activationResults.push({
-			activationId: pressureRequest.activationId,
-			exitCode,
-			source: "pressure",
-		});
-		launchedActivationIds.add(pressureRequest.activationId);
+		if (pressureActivation === undefined) {
+			continue;
+		}
+		activationResults.push(pressureActivation);
+		launchedActivationIds.add(pressureActivation.activationId);
 
-		if (exitCode !== 0) {
-			throw new RepositoryServeError(`Pressure activation '${pressureRequest.activationId}' exited with code ${exitCode}.`);
+		if (pressureActivation.exitCode !== 0) {
+			throw new RepositoryServeError(
+				`Pressure activation '${pressureActivation.activationId}' exited with code ${pressureActivation.exitCode}.`,
+			);
 		}
 	}
 
@@ -339,6 +375,136 @@ export async function dispatchRepositoryServeEvent(options: {
 		triggerId: options.event.triggerId,
 		activationResults,
 	};
+}
+
+async function dispatchRepositoryServeEventThroughReactor(options: {
+	loaded: RepositoryServeLoadedIr;
+	event: RepositoryServeEvent;
+	run: Omit<LaunchActivationRunOptions, "cwd"> & { cwd?: string };
+	reactor: RepositoryServeReactorOptions;
+	cwd: string;
+	activationResults: RepositoryServeActivationResult[];
+	launchedActivationIds: Set<string>;
+}): Promise<void> {
+	const trigger = findTriggerForEvent(options.loaded.manifest, options.event);
+	const bridge = loadResponsibilityReactor({
+		...options.reactor,
+		loaded: options.loaded,
+		responsibilityId: trigger.responsibilityId,
+	});
+	const existing = findRepositoryTriggerReceipt({
+		bridge,
+		loaded: options.loaded,
+		event: options.event,
+		...(options.reactor.asOf === undefined ? {} : { asOf: options.reactor.asOf }),
+	});
+	const latestPressure = await readLatestResponsibilityPressure({
+		openProseRoot: options.loaded.openProseRoot,
+		responsibilityId: bridge.responsibility.id,
+	});
+	if (
+		latestPressure !== undefined &&
+		latestPressure.responsibilityFingerprint === fingerprintResponsibility(bridge.responsibility) &&
+		latestPressure.source.triggerDedupeKey === existing.triggerDedupeKey
+	) {
+		return;
+	}
+	if (existing.receipt !== undefined) {
+		return;
+	}
+	const result = ingestRepositoryTriggerThroughReactor({
+		bridge,
+		loaded: options.loaded,
+		event: options.event,
+		...(options.reactor.asOf === undefined ? {} : { asOf: options.reactor.asOf }),
+	});
+	if (!result.result.accepted) {
+		throw new RepositoryServeError(
+			`Reactor rejected trigger '${options.event.triggerId}' with outcome '${result.result.outcome}'.`,
+		);
+	}
+	if (result.pressure === undefined) {
+		return;
+	}
+
+	const pressureResult = await recordResponsibilityPressure({
+		openProseRoot: options.loaded.openProseRoot,
+		record: result.pressure,
+	});
+	if (pressureResult.recorded !== true) {
+		return;
+	}
+
+	const pressureActivationId = pressureResult.record.activationId;
+	if (pressureActivationId !== undefined && options.launchedActivationIds.has(pressureActivationId)) {
+		return;
+	}
+
+	const pressureRequest = buildPressureActivationRunRequest({
+		loaded: options.loaded,
+		pressure: pressureResult.record,
+	});
+	const pressureActivation = await launchPressureActivationOnce({
+		loaded: options.loaded,
+		pressure: pressureResult.record,
+		request: pressureRequest,
+		run: options.run,
+		cwd: options.cwd,
+	});
+	if (pressureActivation === undefined) {
+		return;
+	}
+	options.activationResults.push(pressureActivation);
+	options.launchedActivationIds.add(pressureActivation.activationId);
+
+	if (pressureActivation.exitCode !== 0) {
+		throw new RepositoryServeError(
+			`Pressure activation '${pressureActivation.activationId}' exited with code ${pressureActivation.exitCode}.`,
+		);
+	}
+}
+
+export async function dispatchPendingPressureActivations(options: {
+	loaded: RepositoryServeLoadedIr;
+	run: Omit<LaunchActivationRunOptions, "cwd"> & { cwd?: string };
+}): Promise<RepositoryServeActivationResult[]> {
+	const results: RepositoryServeActivationResult[] = [];
+	const cwd = options.run.cwd ?? options.loaded.openProseRoot.absolutePath;
+
+	for (const responsibility of options.loaded.manifest.responsibilities) {
+		const pressure = await readLatestResponsibilityPressure({
+			openProseRoot: options.loaded.openProseRoot,
+			responsibilityId: responsibility.id,
+		});
+		if (pressure === undefined) {
+			continue;
+		}
+		if (pressure.responsibilityFingerprint !== fingerprintResponsibility(responsibility)) {
+			continue;
+		}
+
+		const request = buildPressureActivationRunRequest({
+			loaded: options.loaded,
+			pressure,
+		});
+		const result = await launchPressureActivationOnce({
+			loaded: options.loaded,
+			pressure,
+			request,
+			run: options.run,
+			cwd,
+			reclaimIncomplete: true,
+		});
+		if (result === undefined) {
+			continue;
+		}
+		results.push(result);
+		if (result.exitCode !== 0) {
+			throw new RepositoryServeError(`Pressure activation '${result.activationId}' exited with code ${result.exitCode}.`);
+		}
+	}
+
+	return results;
 }
 
 export function buildActivationRunRequest(options: {
@@ -370,6 +536,7 @@ export function buildActivationRunRequest(options: {
 	});
 	const statusPaths =
 		activation.kind === "judge" ? buildResponsibilityStatusPaths(loaded.openProseRoot, responsibility.id) : undefined;
+	const fulfillmentArtifactPath = buildFulfillmentArtifactPath(activation, attemptId);
 	const payload: RepositoryServeActivationPayload = {
 		kind: "openprose.activation",
 		ir: {
@@ -440,6 +607,11 @@ export function buildActivationRunRequest(options: {
 			PROSE_ACTIVATION_ID: activation.id,
 			PROSE_ACTIVATION_ATTEMPT_ID: attemptId,
 			PROSE_ACTIVATION_CONTEXT: payloadJson,
+			...(fulfillmentArtifactPath === undefined
+				? {}
+				: {
+						[PROSE_FULFILLMENT_ARTIFACT_PATH_ENV]: fulfillmentArtifactPath,
+					}),
 			...(statusPaths === undefined
 				? {}
 				: {
@@ -456,6 +628,16 @@ export function buildActivationRunRequest(options: {
 					}),
 		},
 	};
+}
+
+function buildFulfillmentArtifactPath(
+	activation: RepositoryIrActivationIntent,
+	attemptId: string,
+): string | undefined {
+	if (activation.kind === "judge") {
+		return undefined;
+	}
+	return `runs/${attemptId}/fulfillment-artifact.json`;
 }
 
 export function buildPressureFromStatus(options: {
@@ -560,6 +742,40 @@ export async function recordPressureFromStatus(options: {
 	});
 }
 
+async function launchPressureActivationOnce(options: {
+	loaded: RepositoryServeLoadedIr;
+	pressure: ResponsibilityPressureRecord;
+	request: RepositoryServeActivationRunRequest;
+	run: Omit<LaunchActivationRunOptions, "cwd"> & { cwd?: string };
+	cwd: string;
+	reclaimIncomplete?: boolean;
+}): Promise<RepositoryServeActivationResult | undefined> {
+	const claim = await claimResponsibilityPressureDispatch({
+		openProseRoot: options.loaded.openProseRoot,
+		pressure: options.pressure,
+		activationId: options.request.activationId,
+		...(options.reclaimIncomplete === undefined ? {} : { reclaimIncomplete: options.reclaimIncomplete }),
+	});
+	if (!claim.claimed) {
+		return undefined;
+	}
+
+	const exitCode = await launchActivationRun(options.request, {
+		...options.run,
+		cwd: options.cwd,
+	});
+	await completeResponsibilityPressureDispatch({
+		claim,
+		exitCode,
+	});
+
+	return {
+		activationId: options.request.activationId,
+		exitCode,
+		source: "pressure",
+	};
+}
+
 function selectPressureActivation(
 	manifest: RepositoryIrV0,
 	options: {
@@ -615,6 +831,14 @@ function adapterForTriggerKind(kind: RepositoryIrTriggerKind): RepositoryServeTr
 		return "http";
 	}
 	return kind;
+}
+
+function findTriggerForEvent(manifest: RepositoryIrV0, event: RepositoryServeEvent): RepositoryIrTrigger {
+	const trigger = manifest.triggers.find((candidate) => candidate.id === event.triggerId);
+	if (trigger === undefined) {
+		throw new RepositoryServeError(`Unknown trigger '${event.triggerId}'.`);
+	}
+	return trigger;
 }
 
 function validateActivationPressure(options: {

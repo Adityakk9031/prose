@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { posix, resolve } from "node:path";
 import type { OpenProseRoot } from "./openprose-root.js";
 import type { RepositoryIrActivationIntentKind } from "./repository-ir.js";
@@ -20,9 +20,11 @@ export interface ResponsibilityPressurePaths {
 	directoryPath: string;
 	latestPressurePath: string;
 	pressureLogPath: string;
+	pressureClaimDirectoryPath: string;
 	absoluteDirectoryPath: string;
 	absoluteLatestPressurePath: string;
 	absolutePressureLogPath: string;
+	absolutePressureClaimDirectoryPath: string;
 }
 
 export interface ResponsibilityPressureRecord {
@@ -45,6 +47,7 @@ export interface ResponsibilityPressureRecord {
 		statusRunId?: string;
 		manifestPath?: string;
 		irVersion?: number;
+		triggerDedupeKey?: string;
 	};
 }
 
@@ -87,15 +90,18 @@ export function buildResponsibilityPressurePaths(
 	const directoryPath = posix.join(RESPONSIBILITY_STATE_DIR, encodeURIComponent(responsibilityId));
 	const latestPressurePath = posix.join(directoryPath, "pressure.latest.json");
 	const pressureLogPath = posix.join(directoryPath, "pressure.jsonl");
+	const pressureClaimDirectoryPath = posix.join(directoryPath, "pressure-claims");
 
 	return {
 		responsibilityId,
 		directoryPath,
 		latestPressurePath,
 		pressureLogPath,
+		pressureClaimDirectoryPath,
 		absoluteDirectoryPath: resolve(openProseRoot.absolutePath, directoryPath),
 		absoluteLatestPressurePath: resolve(openProseRoot.absolutePath, latestPressurePath),
 		absolutePressureLogPath: resolve(openProseRoot.absolutePath, pressureLogPath),
+		absolutePressureClaimDirectoryPath: resolve(openProseRoot.absolutePath, pressureClaimDirectoryPath),
 	};
 }
 
@@ -196,12 +202,27 @@ export async function recordResponsibilityPressure(options: {
 
 	const paths = buildResponsibilityPressurePaths(options.openProseRoot, options.record.responsibilityId);
 	const latest = await readLatestPressure(paths);
-	if (latest?.dedupeKey === options.record.dedupeKey) {
+	if (latest !== undefined && pressureClaimsMatch(latest, options.record)) {
 		return { paths, record: latest, recorded: false };
 	}
 
-	await mkdir(paths.absoluteDirectoryPath, { recursive: true });
-	await writeFile(paths.absoluteLatestPressurePath, `${JSON.stringify(options.record, null, 2)}\n`, "utf8");
+	await mkdir(paths.absolutePressureClaimDirectoryPath, { recursive: true });
+	const claimPath = resolve(paths.absolutePressureClaimDirectoryPath, `${fingerprintPressureClaim(options.record)}.json`);
+	try {
+		await writeFile(claimPath, `${JSON.stringify(options.record, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+	} catch (error) {
+		if (!isNodeError(error) || error.code !== "EEXIST") {
+			const message = error instanceof Error ? error.message : String(error);
+			throw new ResponsibilityPressureError(`Unable to claim responsibility pressure: ${message}`);
+		}
+		return {
+			paths,
+			record: await readPressureRecord(claimPath, "claimed responsibility pressure"),
+			recorded: false,
+		};
+	}
+
+	await writeJsonFileAtomic(paths.absoluteLatestPressurePath, options.record);
 	await appendFile(paths.absolutePressureLogPath, `${JSON.stringify(options.record)}\n`, "utf8");
 	return { paths, record: options.record, recorded: true };
 }
@@ -218,20 +239,40 @@ async function readLatestPressure(paths: ResponsibilityPressurePaths): Promise<R
 		throw new ResponsibilityPressureError(`Unable to read latest responsibility pressure: ${message}`);
 	}
 
+	return parsePressureRecord(text, "latest responsibility pressure");
+}
+
+async function readPressureRecord(path: string, label: string): Promise<ResponsibilityPressureRecord> {
+	let text: string;
+	try {
+		text = await readFile(path, "utf8");
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new ResponsibilityPressureError(`Unable to read ${label}: ${message}`);
+	}
+
+	return parsePressureRecord(text, label);
+}
+
+function parsePressureRecord(text: string, label: string): ResponsibilityPressureRecord {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		throw new ResponsibilityPressureError(`Unable to parse latest responsibility pressure: ${message}`);
+		throw new ResponsibilityPressureError(`Unable to parse ${label}: ${message}`);
 	}
 
 	const validation = validateResponsibilityPressureRecord(parsed);
 	if (!validation.valid) {
-		throw new ResponsibilityPressureError("Invalid latest responsibility pressure record.", validation.errors);
+		throw new ResponsibilityPressureError(`Invalid ${label} record.`, validation.errors);
 	}
 
 	return parsed as ResponsibilityPressureRecord;
+}
+
+function pressureClaimsMatch(left: ResponsibilityPressureRecord, right: ResponsibilityPressureRecord): boolean {
+	return left.dedupeKey === right.dedupeKey || fingerprintPressureClaim(left) === fingerprintPressureClaim(right);
 }
 
 function fingerprintPressure(value: {
@@ -243,6 +284,38 @@ function fingerprintPressure(value: {
 	activationId?: string;
 }): string {
 	return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function fingerprintPressureClaim(record: ResponsibilityPressureRecord): string {
+	return createHash("sha256")
+		.update(
+			JSON.stringify({
+				schema: "openprose.responsibility-pressure-claim",
+				v: 0,
+				responsibilityId: record.responsibilityId,
+				responsibilityFingerprint: record.responsibilityFingerprint,
+				status: record.status,
+				recommendedActivationKind: record.recommendedActivationKind,
+				...(record.activationId === undefined ? {} : { activationId: record.activationId }),
+				statusRecordedAt: record.source.statusRecordedAt,
+			}),
+		)
+		.digest("hex");
+}
+
+async function writeJsonFileAtomic(path: string, value: unknown): Promise<void> {
+	const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+	try {
+		await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+		await rename(temporaryPath, path);
+	} catch (error) {
+		try {
+			await unlink(temporaryPath);
+		} catch {
+			// Best-effort cleanup; preserve the original write/rename failure.
+		}
+		throw error;
+	}
 }
 
 function validateStringArray(value: unknown, label: string, errors: string[]): void {
@@ -269,7 +342,13 @@ function validatePressureSource(value: unknown, errors: string[]): void {
 	if (!isNonEmptyString(value.statusRecordedAt)) {
 		errors.push("source.statusRecordedAt must be a non-empty string");
 	}
-	for (const key of ["statusActivationId", "statusTriggerId", "statusRunId", "manifestPath"] as const) {
+	for (const key of [
+		"statusActivationId",
+		"statusTriggerId",
+		"statusRunId",
+		"manifestPath",
+		"triggerDedupeKey",
+	] as const) {
 		if (value[key] !== undefined && !isNonEmptyString(value[key])) {
 			errors.push(`source.${key} must be a non-empty string when present`);
 		}

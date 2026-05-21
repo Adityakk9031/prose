@@ -64,12 +64,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: tools/cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         if: ${{ env.SHOULD_RUN == 'true' }}
-        run: npm ci
+        run: corepack enable && pnpm install --frozen-lockfile --dir ../..
 
       - name: Build CLI
         if: ${{ env.SHOULD_RUN == 'true' }}

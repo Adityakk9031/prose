@@ -96,11 +96,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
-          cache-dependency-path: tools/cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: corepack enable && pnpm install --frozen-lockfile --dir ../..
 
       - name: Typecheck
         run: npm run typecheck
@@ -135,11 +135,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: tools/cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: corepack enable && pnpm install --frozen-lockfile --dir ../..
 
       - name: Pack npm artifact
         run: |
@@ -226,11 +226,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: tools/cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: corepack enable && pnpm install --frozen-lockfile --dir ../..
 
       - name: Build
         run: npm run build
@@ -276,11 +276,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: tools/cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: corepack enable && pnpm install --frozen-lockfile --dir ../..
 
       - name: Audit production dependencies
         run: npm run audit:policy

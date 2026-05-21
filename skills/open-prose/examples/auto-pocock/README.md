@@ -1,7 +1,7 @@
 # Auto-Pocock
 
 An automated, non-interactive OpenProse adaptation of [Matt Pocock's public
-engineering-skill workflow][pocock-skills]. One subagent grills, another
+engineering-skill workflow][pocock-skills]. One service grills, another
 decides — because there is no human in the loop.
 
 The system in [`src/auto-pocock.prose.md`](./src/auto-pocock.prose.md) chains

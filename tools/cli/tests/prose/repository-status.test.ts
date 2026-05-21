@@ -3,15 +3,25 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+	POLICY_ARTIFACT_VERSION,
+	POLICY_AUTHOR_HISTORY_QUERY_SCHEMA,
+	type ReactorAgentRequestV0,
+	type ReactorAgentSdkAdapterV0,
+	type ReactorModelGatewayAdapterV0,
+} from "@openprose/reactor";
 
 import {
 	ACTIVE_REPOSITORY_IR_PATH,
 	RESPONSIBILITY_STATUS_KIND,
 	RESPONSIBILITY_STATUS_VERSION,
+	buildReactorPolicyNamespace,
 	buildResponsibilityPressureRecord,
 	fingerprintResponsibility,
 	formatRepositoryStatus,
+	ingestRepositoryTriggerThroughReactor,
 	loadRepositoryStatus,
+	loadResponsibilityReactor,
 	recordResponsibilityPressure,
 	recordResponsibilityStatus,
 	type OpenProseRoot,
@@ -21,6 +31,8 @@ import {
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const stargazerFixture = join(repoRoot, "tests/open-prose/compiler/expected/stargazer.manifest.next.json");
+const stargazerResponsibilityId = "067NC4KG01RG50R40M30E20918";
+const stargazerTriggerId = "high-intent-stargazer-outreach.periodic-check";
 
 describe("repository status", () => {
 	it("renders a useful status for an uncompiled OpenProse root", async () => {
@@ -137,6 +149,57 @@ describe("repository status", () => {
 		}
 	});
 
+	it("renders Reactor receipt status with per-token surprise attribution", async () => {
+		const temp = mkdtempSync(join(tmpdir(), "prose-status-reactor-"));
+
+		try {
+			writeActiveManifest(temp);
+			const loaded = await loadRepositoryStatus({ cwd: temp });
+			expect(loaded.activeIr.manifest).toBeDefined();
+			const bridge = loadResponsibilityReactor({
+				loaded: {
+					manifest: loaded.activeIr.manifest!,
+					manifestPath: loaded.activeIr.manifestPath,
+					absoluteManifestPath: loaded.activeIr.absoluteManifestPath,
+					openProseRoot: loaded.openProseRoot,
+				},
+				responsibilityId: stargazerResponsibilityId,
+				modelGateway: makeModelGateway("down"),
+				agentSdk: makePolicyAuthorAgent(),
+				clock: { now: () => "2026-05-19T12:00:00.000Z" },
+			});
+			const reactorResult = ingestRepositoryTriggerThroughReactor({
+				bridge,
+				loaded: {
+					manifest: loaded.activeIr.manifest!,
+					manifestPath: loaded.activeIr.manifestPath,
+					absoluteManifestPath: loaded.activeIr.absoluteManifestPath,
+					openProseRoot: loaded.openProseRoot,
+				},
+				event: { triggerId: stargazerTriggerId },
+			});
+			expect(reactorResult.pressure).toBeDefined();
+			await recordResponsibilityPressure({
+				openProseRoot: loaded.openProseRoot,
+				record: reactorResult.pressure!,
+			});
+
+			const output = formatRepositoryStatus(await loadRepositoryStatus({ cwd: temp }));
+
+			expect(output).toContain("status: down at 2026-05-19T12:00:00.000Z; receipt sha256:");
+			expect(output).toContain(
+				"surprise: fresh=13 reused=2 surprise_cause=real-input role=judge provider=cli-test model=fixture-shallow-judge",
+			);
+			expect(output).toContain("forecast: next_recheck=");
+			expect(output).toContain(
+				"pressure: fulfillment for down -> high-intent-stargazer-outreach.fulfillment; at 2026-05-19T12:00:00.000Z",
+			);
+			expect(output).not.toContain("status: no runtime status yet");
+		} finally {
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
 	it("marks older pressure as resolved after a newer up status", async () => {
 		const temp = mkdtempSync(join(tmpdir(), "prose-status-resolved-pressure-"));
 
@@ -215,4 +278,83 @@ function writeActiveManifest(temp: string): void {
 
 function readFixture(): RepositoryIrV0 {
 	return JSON.parse(readFileSync(stargazerFixture, "utf8")) as RepositoryIrV0;
+}
+
+function makeModelGateway(status: "up" | "drifting" | "down" | "blocked"): ReactorModelGatewayAdapterV0 {
+	return {
+		invoke: () => ({
+			payload: {
+				status,
+				confidence: {
+					value: 0.74,
+					derivation_method: "cli-status-test",
+					label_source: "fixture",
+				},
+				cost_tags: {
+					tags: ["cli-status"],
+				},
+			},
+			usage: {
+				provider: "cli-test",
+				model: "fixture-shallow-judge",
+				tokens: {
+					fresh: 13,
+					reused: 2,
+				},
+			},
+		}),
+	};
+}
+
+function makePolicyAuthorAgent(): ReactorAgentSdkAdapterV0 {
+	return {
+		launch: (request) => ({
+			payload: policyAuthorPayload(request),
+		}),
+	};
+}
+
+function policyAuthorPayload(request: ReactorAgentRequestV0): unknown {
+	const payload = request.payload as { readonly step?: string; readonly responsibility_id?: string };
+	if (payload.step === "history-query") {
+		return {
+			schema: POLICY_AUTHOR_HISTORY_QUERY_SCHEMA,
+			v: POLICY_ARTIFACT_VERSION,
+			selected_receipt_hashes: [],
+		};
+	}
+
+	const policyNamespace = buildReactorPolicyNamespace(payload.responsibility_id ?? stargazerResponsibilityId);
+	return {
+		registry_id: policyNamespace,
+		policy_revision: "1",
+		cadence: {
+			shallow_recheck_ms: 86_400_000,
+			plan_audit_ms: 604_800_000,
+			deep_revalidation_ms: 604_800_000,
+		},
+		hysteresis: {
+			min_recompile_interval_ms: 3_600_000,
+			enter_degraded_threshold: 0.8,
+			exit_degraded_threshold: 0.6,
+			warmup_judged_activations: 3,
+		},
+		thresholds: {
+			max_calibration_divergence_multiplier: 2,
+			escalation_precision_floor: 0.6,
+			backstop_deep_contradiction_count: 2,
+			stale_brief_minutes: 1_440,
+			fresh_tokens_per_day_ceiling: 50_000,
+		},
+		falsification_predicate: {
+			kind: "greater-than-or-equal",
+			fact: "cost.fresh_tokens_per_maintained_day",
+			value: 50_000,
+		},
+		backstop_divergence_predicate: {
+			kind: "greater-than-or-equal",
+			fact: "kernel.deep_shallow_contradiction_count_7d",
+			value: 2,
+		},
+	};
 }

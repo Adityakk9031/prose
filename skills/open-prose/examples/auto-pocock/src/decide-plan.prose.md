@@ -11,7 +11,7 @@ Turn the griller's challenge report into a decision-ready plan and lock
 the terminology the rest of the run must use verbatim. This service is an
 OpenProse adaptation — Pocock's `grill-with-docs` resolves decisions
 inline within the same interactive session and does not have a separate
-"decider" step. The split exists here only because the grilling subagent
+"decider" step. The split exists here only because the grilling service
 is non-interactive; the decider service stands in for the human
 judgment Pocock's flow normally provides.
 

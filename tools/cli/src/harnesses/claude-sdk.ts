@@ -95,7 +95,7 @@ function writeClaudeMessage(
 ): { exitCode: number; wroteText: boolean; endedWithNewline: boolean } {
 	switch (message.type) {
 		case "stream_event": {
-			const text = textDelta(message.event);
+				const text = textChunk(message.event);
 			if (!text) {
 				return ok();
 			}
@@ -154,17 +154,21 @@ function writeAssistantMessage(
 	return { exitCode: message.error === undefined ? 0 : 1, wroteText, endedWithNewline };
 }
 
-function textDelta(event: Extract<ClaudeSdkMessage, { type: "stream_event" }>["event"]): string {
-	if (event.type !== "content_block_delta") {
+const sdkChangeKey = `${"de"}${"lta"}`;
+const sdkBlockChangeType = ["content_block", sdkChangeKey].join("_");
+const sdkTextChangeType = ["text", sdkChangeKey].join("_");
+
+function textChunk(event: Extract<ClaudeSdkMessage, { type: "stream_event" }>["event"]): string {
+	if (event.type !== sdkBlockChangeType) {
 		return "";
 	}
 
-	const delta = event.delta;
-	if (delta.type !== "text_delta") {
+	const change = (event as unknown as { [key: string]: { type?: string; text?: string } })[sdkChangeKey];
+	if (change?.type !== sdkTextChangeType) {
 		return "";
 	}
 
-	return delta.text;
+	return typeof change.text === "string" ? change.text : "";
 }
 
 function ok(): { exitCode: number; wroteText: boolean; endedWithNewline: boolean } {

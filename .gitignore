@@ -1,6 +1,13 @@
 # Legacy local OpenProse state
 .prose/
 
+# Node and TypeScript build output
+node_modules/
+**/node_modules/
+**/dist/
+**/.turbo/
+*.tsbuildinfo
+
 # Current OpenProse generated state
 .agents/prose/.env
 .agents/prose/deps/

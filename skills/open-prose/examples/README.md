@@ -25,7 +25,7 @@ receipts in `runs/`, durable state in `state/`, and dependencies in `deps/`.
 - [auto-pocock](./auto-pocock/) chains Matt Pocock's published engineering
   skills (grill-with-docs, to-prd, to-issues, tdd, plus his per-repo
   conventions) into a single non-interactive OpenProse system, with the
-  two-subagent grill-and-decide split called out as an OpenProse adaptation.
+  two-step grill-and-decide split called out as an OpenProse adaptation.
 - [declared-skills](./declared-skills/) shows a minimal `### Skills`
   requirement that fails closed at compile time when the host skill is missing.
 - [declared-tools](./declared-tools/) shows a minimal `### Tools` requirement

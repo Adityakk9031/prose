@@ -1,8 +1,16 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+	RECEIPT_PROJECTION_TIERS_V0,
+	projectReceiptV0,
+	type ReceiptProjectionTierV0,
+	type ReceiptProjectionV0,
+	type ReceiptV0,
+} from "@openprose/reactor";
+import {
 	ACTIVE_REPOSITORY_IR_PATH,
 	type RepositoryIrDiagnostic,
+	type RepositoryIrResponsibility,
 	type RepositoryIrV0,
 	validateRepositoryIr,
 } from "./repository-ir.js";
@@ -23,22 +31,31 @@ import {
 	validateResponsibilityStatusRecord,
 	type ResponsibilityStatusRecord,
 } from "./responsibility-status.js";
+import {
+	buildReactorContractRevision,
+	buildResponsibilityReactorPaths,
+} from "./responsibility-reactor.js";
 
 export const REPOSITORY_RUNS_DIR = "runs";
 export const REPOSITORY_STATUS_RECENT_RUN_LIMIT = 5;
+export const REPOSITORY_STATUS_PROJECTION_TIERS = RECEIPT_PROJECTION_TIERS_V0;
+export const DEFAULT_REPOSITORY_STATUS_PROJECTION_TIER = "owner" as const satisfies ReceiptProjectionTierV0;
 
 export type RepositoryStatusIrState = "loaded" | "missing" | "invalid";
 export type RepositoryStatusRecordState = "present" | "missing" | "invalid";
+export type RepositoryStatusProjectionTier = ReceiptProjectionTierV0;
 
 export interface LoadRepositoryStatusOptions {
 	cwd: string;
 	home?: string;
 	manifestPath?: string;
 	runLimit?: number;
+	tier?: RepositoryStatusProjectionTier;
 }
 
 export interface RepositoryStatusSummary {
 	openProseRoot: OpenProseRoot;
+	projectionTier: RepositoryStatusProjectionTier;
 	activeIr: RepositoryStatusActiveIr;
 	registrations: RepositoryServeTriggerRegistration[];
 	responsibilities: RepositoryStatusResponsibility[];
@@ -57,6 +74,7 @@ export interface RepositoryStatusResponsibility {
 	id: string;
 	sourcePath: string;
 	fingerprint: string;
+	reactor: RepositoryStatusLatestReactor;
 	status: RepositoryStatusLatestStatus;
 	pressure: RepositoryStatusLatestPressure;
 }
@@ -73,6 +91,14 @@ export interface RepositoryStatusLatestPressure {
 	error?: string;
 	record?: ResponsibilityPressureRecord;
 	resolved?: boolean;
+	stale?: boolean;
+}
+
+export interface RepositoryStatusLatestReactor {
+	state: RepositoryStatusRecordState;
+	error?: string;
+	receipt?: ReceiptV0;
+	projection?: ReceiptProjectionV0;
 	stale?: boolean;
 }
 
@@ -93,6 +119,7 @@ export class RepositoryStatusError extends Error {
 }
 
 export async function loadRepositoryStatus(options: LoadRepositoryStatusOptions): Promise<RepositoryStatusSummary> {
+	const projectionTier = options.tier ?? DEFAULT_REPOSITORY_STATUS_PROJECTION_TIER;
 	const openProseRoot = await resolveOpenProseRoot({
 		cwd: options.cwd,
 		...(options.home === undefined ? {} : { home: options.home }),
@@ -103,11 +130,12 @@ export async function loadRepositoryStatus(options: LoadRepositoryStatusOptions)
 	const responsibilities =
 		activeIr.manifest === undefined
 			? []
-			: await loadResponsibilityStatusSummaries(openProseRoot, activeIr.manifest);
+			: await loadResponsibilityStatusSummaries(openProseRoot, activeIr.manifest, projectionTier);
 	const runs = await loadRecentRuns(openProseRoot, options.runLimit ?? REPOSITORY_STATUS_RECENT_RUN_LIMIT);
 
 	return {
 		openProseRoot,
+		projectionTier,
 		activeIr,
 		registrations,
 		responsibilities,
@@ -211,27 +239,72 @@ async function loadStatusActiveIr(openProseRoot: OpenProseRoot, manifestPath: st
 async function loadResponsibilityStatusSummaries(
 	openProseRoot: OpenProseRoot,
 	manifest: RepositoryIrV0,
+	projectionTier: RepositoryStatusProjectionTier,
 ): Promise<RepositoryStatusResponsibility[]> {
 	return Promise.all(
 		manifest.responsibilities.map(async (responsibility) => {
 			const fingerprint = fingerprintResponsibility(responsibility);
 			const statusPaths = buildResponsibilityStatusPaths(openProseRoot, responsibility.id);
 			const pressurePaths = buildResponsibilityPressurePaths(openProseRoot, responsibility.id);
-			const [status, pressure] = await Promise.all([
+			const reactorPaths = buildResponsibilityReactorPaths(openProseRoot, responsibility.id);
+			const [reactor, status, pressure] = await Promise.all([
+				readLatestReactorReceipt(
+					resolve(reactorPaths.absoluteDirectoryPath, "receipts.json"),
+					responsibility,
+					projectionTier,
+				),
 				readLatestStatus(statusPaths.absoluteLatestPath, fingerprint),
 				readLatestPressure(pressurePaths.absoluteLatestPressurePath, fingerprint),
 			]);
-			const currentPressure = markResolvedPressure(status, pressure);
+			const currentPressure = markResolvedPressure(status, pressure, reactor);
 
 			return {
 				id: responsibility.id,
 				sourcePath: responsibility.sourcePath,
 				fingerprint,
+				reactor,
 				status,
 				pressure: currentPressure,
 			};
 		}),
 	);
+}
+
+async function readLatestReactorReceipt(
+	path: string,
+	responsibility: RepositoryIrResponsibility,
+	projectionTier: RepositoryStatusProjectionTier,
+): Promise<RepositoryStatusLatestReactor> {
+	const parsed = await readOptionalJson(path, "reactor receipts");
+	if (parsed.state !== "present") {
+		return parsed;
+	}
+	if (!Array.isArray(parsed.value)) {
+		return { state: "invalid", error: "reactor receipts must be an array" };
+	}
+	if (parsed.value.length === 0) {
+		return { state: "missing" };
+	}
+
+	const receipt = parsed.value[parsed.value.length - 1] as ReceiptV0;
+	const projectionResult = projectReceiptV0({ tier: projectionTier, receipt });
+	if (!projectionResult.ok) {
+		return { state: "invalid", error: projectionResult.errors.join("; ") };
+	}
+	if (projectionResult.projection.tier !== projectionTier) {
+		return { state: "invalid", error: `reactor receipt did not project to ${projectionTier} tier` };
+	}
+
+	const projection = projectionResult.projection;
+	const expectedContractRevision = buildReactorContractRevision(responsibility);
+	return {
+		state: "present",
+		receipt,
+		projection,
+		stale:
+			receipt.core.responsibility_id !== responsibility.id ||
+			projection.contract_revision !== expectedContractRevision,
+	};
 }
 
 async function readLatestStatus(path: string, fingerprint: string): Promise<RepositoryStatusLatestStatus> {
@@ -369,7 +442,8 @@ function appendResponsibilities(lines: string[], responsibilities: RepositorySta
 	for (const responsibility of responsibilities) {
 		lines.push(`- ${responsibility.id}`);
 		lines.push(`  source: ${responsibility.sourcePath}`);
-		lines.push(`  status: ${formatLatestStatus(responsibility.status)}`);
+		lines.push(`  status: ${formatCurrentStatus(responsibility)}`);
+		appendReactorDetails(lines, responsibility.reactor);
 		lines.push(`  pressure: ${formatLatestPressure(responsibility.pressure)}`);
 	}
 }
@@ -383,6 +457,75 @@ function appendRuns(lines: string[], runs: RepositoryStatusRun[]): void {
 
 	for (const run of runs) {
 		lines.push(`- ${run.id} updated ${run.updatedAt}`);
+	}
+}
+
+function formatCurrentStatus(responsibility: RepositoryStatusResponsibility): string {
+	if (responsibility.reactor.state !== "missing") {
+		return formatLatestReactorStatus(responsibility.reactor);
+	}
+	return formatLatestStatus(responsibility.status);
+}
+
+function formatLatestReactorStatus(reactor: RepositoryStatusLatestReactor): string {
+	if (reactor.state === "invalid") {
+		return `invalid reactor receipt (${reactor.error ?? "unknown error"})`;
+	}
+	const projection = reactor.projection;
+	if (projection === undefined) {
+		return "invalid reactor receipt (missing projection)";
+	}
+	return [
+		`${projection.status ?? "unknown"} at ${projection.freshness.as_of}`,
+		`receipt ${projection.content_hash}`,
+		reactor.stale ? "stale" : undefined,
+	]
+		.filter((part): part is string => part !== undefined)
+		.join("; ");
+}
+
+function appendReactorDetails(lines: string[], reactor: RepositoryStatusLatestReactor): void {
+	if (reactor.state === "missing") {
+		return;
+	}
+	if (reactor.state === "invalid") {
+		lines.push(`  reactor: invalid (${reactor.error ?? "unknown error"})`);
+		return;
+	}
+
+	const projection = reactor.projection;
+	if (projection === undefined) {
+		lines.push("  reactor: invalid (missing projection)");
+		return;
+	}
+
+	const tokenTruth = projection.token_truth;
+	if (projection.tier !== "owner") {
+		lines.push(`  projection: ${projection.tier}`);
+	}
+	const tokenTruthParts = [
+		`  surprise: fresh=${tokenTruth.fresh}`,
+		`reused=${tokenTruth.reused}`,
+		`surprise_cause=${tokenTruth.surprise_cause}`,
+		`role=${tokenTruth.role}`,
+		"provider" in tokenTruth ? `provider=${tokenTruth.provider}` : undefined,
+		"model" in tokenTruth ? `model=${tokenTruth.model}` : undefined,
+	].filter((part): part is string => part !== undefined);
+	lines.push(tokenTruthParts.join(" "));
+	lines.push(`  forecast: next_recheck=${projection.freshness.next_forecast_recheck}`);
+
+	if (projection.tier !== "owner") {
+		return;
+	}
+	const blocked = projection.verdict.blocked;
+	if (blocked !== null) {
+		lines.push(
+			[
+				`  blocked: ${blocked.reason ?? "unknown reason"}`,
+				`fix_target=${blocked.fix_target ?? "unknown"}`,
+				`interrupt_cause=${blocked.interrupt_cause ?? "unknown"}`,
+			].join("; "),
+		);
 	}
 }
 
@@ -434,7 +577,20 @@ function formatLatestPressure(pressure: RepositoryStatusLatestPressure): string 
 function markResolvedPressure(
 	status: RepositoryStatusLatestStatus,
 	pressure: RepositoryStatusLatestPressure,
+	reactor: RepositoryStatusLatestReactor,
 ): RepositoryStatusLatestPressure {
+	if (reactor.state === "present" && pressure.state === "present") {
+		if (reactor.stale || pressure.stale || reactor.projection?.status !== "up") {
+			return pressure;
+		}
+		if ((reactor.projection?.freshness.as_of ?? "") < (pressure.record?.recordedAt ?? "")) {
+			return pressure;
+		}
+		return {
+			...pressure,
+			resolved: true,
+		};
+	}
 	if (status.state !== "present" || pressure.state !== "present") {
 		return pressure;
 	}

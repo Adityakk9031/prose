@@ -20,8 +20,8 @@ proposal script, Host Primitive Adapter, giving-back playbook) lives in
 SKILL.md and is loaded post-activation. Do not duplicate SKILL.md here —
 prefer a link.
 
-Editing this file: bump the submodule commit in the platform repo, then
-terraform apply + fly deploy pick up the new bytes. No sync script.
+Editing this file: commit the update in this repo; the deployment pipeline picks
+up the new bytes. No sync script.
 -->
 
 # OpenProse — Agent Onboarding

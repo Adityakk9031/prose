@@ -9,11 +9,11 @@ kind: system
 
 An automated, non-interactive OpenProse adaptation of the public Matt Pocock
 engineering-skill workflow (`grill-with-docs`, `to-prd`, `to-issues`, `tdd`,
-plus his `setup-matt-pocock-skills` per-repo conventions). One subagent
+plus his `setup-matt-pocock-skills` per-repo conventions). One service
 grills, another decides — because there is no human in the loop. Pocock's
 own `grill-with-docs` is explicitly interactive ("ask the questions one at
 a time, waiting for feedback on each question before continuing"); the
-two-subagent split here is our adaptation for unattended runs, not a claim
+two-step split here is our adaptation for unattended runs, not a claim
 that Pocock himself runs it this way.
 
 Names, vocabulary, and template structure are credited to Pocock and

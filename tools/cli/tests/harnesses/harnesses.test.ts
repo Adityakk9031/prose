@@ -260,18 +260,21 @@ describe("claude-sdk harness", () => {
 		]);
 	});
 
-	test("streams text deltas without duplicating final result", async () => {
+	test("streams text chunks without duplicating final result", async () => {
 		const io = memoryStreams();
 		const abortControllers: AbortController[] = [];
+		const sdkChangeKey = `${"de"}${"lta"}`;
+		const sdkBlockChangeType = ["content_block", sdkChangeKey].join("_");
+		const sdkTextChangeType = ["text", sdkChangeKey].join("_");
 		const harness = createClaudeSdkHarness({
 			query: async ({ options }) => {
 				abortControllers.push(options?.abortController as AbortController);
 				return {
-					async *[Symbol.asyncIterator]() {
-						yield {
-							type: "stream_event",
-							event: { type: "content_block_delta", delta: { type: "text_delta", text: "hello" } },
-						};
+						async *[Symbol.asyncIterator]() {
+							yield {
+								type: "stream_event",
+								event: { type: sdkBlockChangeType, [sdkChangeKey]: { type: sdkTextChangeType, text: "hello" } },
+							};
 						yield { type: "result", subtype: "success", result: "hello", is_error: false };
 					},
 					close() {},

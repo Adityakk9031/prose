@@ -1,6 +1,7 @@
 import { Command } from "@oclif/core";
 import type { CommandName } from "../prose/index.js";
 import { canonicalPrompt, CommandModelError, usageFor } from "../prose/index.js";
+import { recordForwardedFulfillmentArtifact } from "../prose/fulfillment-artifact.js";
 import { createHarness, type HarnessName } from "../harnesses/index.js";
 import type { Harness, WritableStreamLike } from "../harnesses/types.js";
 import { ensureOpenProseSkill, loadOpenProseSkillBootstrap, type OpenProseSkillBootstrap } from "../skills/open-prose.js";
@@ -102,7 +103,7 @@ export async function runForwardedProseCommand(options: ForwardRunOptions): Prom
 		: undefined;
 
 	const selectedHarness = (options.harnessFactory ?? createHarness)(harness);
-	return selectedHarness.run(prompt, {
+	const exitCode = await selectedHarness.run(prompt, {
 		...(skillBootstrap === undefined
 			? {}
 			: {
@@ -115,6 +116,16 @@ export async function runForwardedProseCommand(options: ForwardRunOptions): Prom
 		stderr: options.stderr,
 		...(options.signal === undefined ? {} : { signal: options.signal }),
 	});
+	await recordForwardedFulfillmentArtifact({
+		command: options.command,
+		argv: args,
+		cwd: options.cwd,
+		env: options.env,
+		exitCode,
+		harness,
+		prompt,
+	});
+	return exitCode;
 }
 
 async function hydrateForwardedArgs(

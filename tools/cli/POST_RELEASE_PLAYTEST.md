@@ -187,7 +187,7 @@ Use small fixtures first, then try one or two realistic programs.
 
 ## Worker Prompt
 
-When using async subagents, give each one a narrow brief. For example:
+When using async helper runs, give each one a narrow brief. For example:
 
 ```text
 You are Worker npm-fresh in a post-release playtest for OpenProse <version>.

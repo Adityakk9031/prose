@@ -3,6 +3,7 @@ import {
 	DEFAULT_REPOSITORY_SERVE_HOST,
 	DEFAULT_REPOSITORY_SERVE_PORT,
 	RepositoryServeError,
+	createLocalRepositoryServeReactorOptions,
 	startRepositoryServeDaemon,
 } from "../prose/index.js";
 import { runForwardedProseCommand } from "./base.js";
@@ -18,11 +19,13 @@ export default class Serve extends Command {
 
 		try {
 			const args = parseServeArgs(this.argv);
+			const env = args.harness === undefined ? process.env : { ...process.env, PROSE_HARNESS: args.harness };
 			const daemon = await startRepositoryServeDaemon({
 				cwd: process.cwd(),
-				env: args.harness === undefined ? process.env : { ...process.env, PROSE_HARNESS: args.harness },
+				env,
 				host: args.host,
 				port: args.port,
+				reactor: createLocalRepositoryServeReactorOptions({ env }),
 				signal: controller.signal,
 				stderr: process.stderr,
 				stdout: process.stdout,
