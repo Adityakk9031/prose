@@ -55,6 +55,15 @@ independently rather than trusting the producer.
 A contract and its trail can leave for any compliant host with no lost meaning.
 Portability is the discipline that keeps every host honest.
 
+## 7. One bounded run, one session; the DAG composes.
+
+An activation is one bounded session in one runtime. What looks like
+orchestration inside it — wiring, delegation, sub-task isolation, choreography
+— is the agent honoring the contract with the runtime's own primitives. The
+only seam where multiple runs meet is the world-model DAG, where activations
+communicate through durable artifacts anchored by signed receipts. There is no
+third tier.
+
 ---
 
 *Governance — not a numbered tenet: the OpenProse language, runtime, and skill

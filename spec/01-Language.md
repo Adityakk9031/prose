@@ -22,23 +22,18 @@ ships:
   Reactor-Native Authoring Pattern**, **SKILL-bundled but harness-governed**:
   how to write `*.prose.md` so the harness's mechanisms engage. It bridges
   this doc and the Harness doc.
-- **Internal decision log** — not shipped: the dialectic that produced the
-  Harness doc; the clean statements live in the public specs above.
+- [ReactorFeedback.md](../history/ReactorFeedback.md) — **the
+  decision log**, not shipped: the dialectic that produced the Harness doc;
+  the clean statements live in the docs above.
 - [00-Tenets.md](./00-Tenets.md) — **the constitution**. When any
   document tensions with a tenet, the tenet wins.
 
 This file has three parts, mirroring its companions:
 
-1. **Ideal** — the OpenProse language and framework as it *should* be. This is
-   the frozen authored vision.
-2. **Current** — an accurate, code-grounded snapshot of what the
-   public `openprose/prose` skill package and CLI *actually do today*. This
-   section is mechanically re-derivable from the code; it is named real
-   modules, real types, real behaviors, with paths.
-3. **Roadmap (the Delta)** — the honest gap: what bridges Current → Ideal.
-
-`Ideal − Current = Roadmap`. The three are kept distinct so the document can
-never again claim shipped what isn't, or aspire in the same breath it reports.
+1. **The ideal** OpenProse language and framework.
+2. **What exists today** (the current `platform/external/prose` skill package,
+   treated as ground truth).
+3. **What is next** to bring the current skill to the ideal.
 
 ---
 
@@ -153,42 +148,25 @@ the semantics by which it is understood.
 
 ---
 
-## Part II — Current
+## Part II — What Exists Today
 
-> This part is a fresh, code-grounded audit of the public `openprose/prose`
-> repository at `main` (HEAD `52724ed`, tag `reactor-v0.1.0`). It
-> reports what the bundled skill and the `@openprose/prose-cli` package
-> **actually do** at the audited state — version `0.14.0`. Where the language
-> as authored exceeds what the code exercises, this part says so. It is named
-> against real files; it is mechanically re-derivable from the code, and it is
-> the section that must stay true.
->
-> Older framing around hosted cloud products, social execution networks,
-> company financing, `kind: program`, `.prose` source files, and the old
-> registry model is not part of this audit unless the current repo still
-> contains a live implementation or spec for it.
+> This part is a synthesis of the current `platform/external/prose` repository,
+> treated as the source of truth. Older framing around hosted cloud products,
+> social execution networks, company financing, `kind: program`, `.prose`
+> source files, and the old registry model is not part of this synthesis
+> unless the current repo still contains a live implementation or spec for it.
 
 ### Current Shape
 
-OpenProse is distributed as a skill bundle plus a CLI. The skill at
-`skills/open-prose/` carries the language doctrine; the CLI at `tools/cli/`
-(`@openprose/prose-cli`) hosts the deterministic runtime pieces.
+OpenProse currently has five load-bearing pieces:
 
-The load-bearing skill docs are:
-
-| Doc | Location | Role |
+| Piece | Location | Role |
 | --- | --- | --- |
 | Contract Markdown | `skills/open-prose/contract-markdown.md` | Canonical `*.prose.md` source format |
 | Forme | `skills/open-prose/forme.md` | Semantic dependency-injection container for systems |
 | Prose VM | `skills/open-prose/prose.md` | Execution semantics for services, systems, tests, and runs |
 | ProseScript | `skills/open-prose/prosescript.md` | Imperative choreography inside `### Execution` and pattern `### Delegation` |
-| Responsibility Runtime | `skills/open-prose/responsibility-runtime.md` | Standing goals, Reactor, repository IR, `compile`, `serve`, `status` |
-| Compiler program | `skills/open-prose/compiler/index.prose.md` | The pinned ProseScript compiler service |
-| IR v0 contract | `skills/open-prose/compiler/ir-v0.md` | The repository IR v0 output contract |
-| Concepts | `skills/open-prose/concepts/responsibility.md`, `concepts/reactor.md` | Responsibility and Reactor semantic contracts |
-| State backends | `skills/open-prose/state/{filesystem,in-context,sqlite,postgres}.md` | The four declared state backends |
-| Authoring guidance | `skills/open-prose/guidance/{authoring,tenets,system-prompt}.md` | Authoring how-to and design reasoning |
-| `SKILL.md` | `skills/open-prose/SKILL.md` | Agent-facing skill entrypoint |
+| Responsibility Runtime | `skills/open-prose/responsibility-runtime.md` | Standing goals, Reactor, repository IR, `compile`, `serve`, and `status` |
 
 The shippable repository also contains:
 
@@ -196,21 +174,14 @@ The shippable repository also contains:
 | --- | --- | --- |
 | OpenProse skill | `skills/open-prose/` | Agent-facing runtime/spec bundle |
 | CLI | `tools/cli/` | Shell entrypoint and deterministic host for compile/status/serve |
-| Standard library | `packages/std/` | Reusable roles, patterns, ops, delivery, memory, evals |
+| Standard library | `packages/std/` | Reusable roles, patterns, ops, delivery, memory, and evals |
 | Company-as-Prose package | `packages/co/` | Generic company-operations starter contracts |
-| Reactor packages | `packages/reactor/`, `packages/reactor-cradle/` | The Reactor harness runtime; specified in [02-ReactorHarness.md](./02-ReactorHarness.md) |
-| Examples | `skills/open-prose/examples/` | Native OpenProse repositories and minimal feature demos |
+| Reactor packages | `packages/reactor/`, `packages/reactor-cradle/` | The Reactor harness runtime; specified in [02-ReactorHarness.md](./02-ReactorHarness.md), not language material |
+| Examples | `skills/open-prose/examples/` | Native OpenProse repositories demonstrating responsibilities |
 | Tests and fixtures | `tests/open-prose/`, `tools/cli/tests/` | Smoke fixtures, compiler fixtures, IR/runtime tests |
 | Plugin envelopes | `.codex-plugin/`, `.claude-plugin/`, `.agents/plugins/` | Marketplace/install metadata |
 
-OpenProse is distributed as an MIT-licensed beta (`LICENSE`, `TERMS.md`,
-`PRIVACY.md`) and collects no telemetry.
-
-> **Audit note.** The Reactor harness runtime (`packages/reactor`,
-> `packages/reactor-cradle`) is present in the repository but is not language
-> material. Its current state is audited in `02-ReactorHarness.md`. This
-> document audits only the language, the source-compile, and the CLI surface
-> that drives them.
+OpenProse is distributed as an MIT-licensed beta and collects no telemetry.
 
 ### What OpenProse Is Not
 
@@ -219,22 +190,26 @@ The current repository narrows the ground truth:
 - Current source files are `*.prose.md`, not plain `.md` contracts or
   standalone `.prose` programs.
 - Current authored kinds are `service`, `system`, `gateway`, `test`, `pattern`,
-  and `responsibility`. The source-compiler's `knownSourceKinds` set
-  (`tools/cli/src/prose/repository-source-compiler.ts`) enumerates exactly
-  these six; any other `kind:` lowers to `unknown`.
+  and `responsibility`.
 - `kind: program`, `kind: composite`, `compose:`, old numbered examples, old
   `.deps/` layout, `~/.prose`, and `.prose/runs/` are legacy upgrade context.
-- `prose migrate` and `prose wire` are retired; current migration is
-  `prose upgrade`, and current source compilation is `prose compile`. The
-  CLI's command set (`tools/cli/src/commands/index.ts`) contains no `migrate`
-  or `wire` command.
+- `prose migrate`, `prose wire`, and old compile-as-lint wording are retired;
+  current migration is `prose upgrade`, and current Responsibility Runtime
+  compilation is `prose compile`.
 - Bare `owner/repo` identifiers and `p.prose.md` registry resolution are
   reserved/inert. Current dependency resolution is explicit git-host based,
   with `std/` and `co/` shorthands.
 - The current repo does not specify a product/business platform surface like
-  Cloud billing, sprites, Constellation, or an investor narrative. Hosted
-  product, public/social, subscription, royalty, dependency-graph, brand, and
-  design surfaces are intentionally outside this public language/runtime spec.
+  Cloud billing, sprites, Constellation, or an investor narrative. The hosted
+  product, public/social surface, and go-to-market motion are sketched in
+  [ContinuousOutcomes.md](../ideation/ContinuousOutcomes.md) (stale
+  product ideation, not a live spec); the forward-looking subscription,
+  royalty, and dependency-graph economics are sketched in
+  [SubscriptionsHypothetical.md](../ideation/SubscriptionsHypothetical.md)
+  (hypothetical, not a live spec and not load-bearing); the brand and design
+  surface lives in `platform/apps/run/PRODUCT.md`. None of those documents are
+  live OpenProse language/runtime material; this file remains the language and
+  runtime spec only.
 
 ### Prose Complete
 
@@ -251,12 +226,9 @@ the abstract VM primitives onto real capabilities:
 | `check_tool` | Confirm a declared host tool exists without installing, modifying, or running it |
 
 Codex-style and Claude Code-style environments are the primary documented
-targets. The CLI ships three harness adapters
-(`tools/cli/src/harnesses/`): `codex-sdk` (`codex-sdk.ts`, built on
-`@openai/codex-sdk`), `claude-sdk` (`claude-sdk.ts`), and a local `mock`
-harness (`mock.ts`). `HARNESS_NAMES` in `harnesses/index.ts` is exactly
-`["codex-sdk", "claude-sdk", "mock"]`. OpenProse commands are therefore first
-an agent-session command language. A shell command such as:
+targets. The CLI can currently forward runs to `codex-sdk`, `claude-sdk`, or a
+local `mock` harness. OpenProse commands are therefore first an agent-session
+command language. A shell command such as:
 
 ```bash
 prose run src/hello.prose.md
@@ -274,11 +246,6 @@ Every run happens relative to an OpenProse root:
 | Native repository | Repository root |
 | Attached repository | `repo/.agents/prose` |
 | User-global | `~/.agents/prose` |
-
-These are the constants in `tools/cli/src/prose/openprose-root.ts`
-(`ATTACHED_OPENPROSE_ROOT_PATH = ".agents/prose"`,
-`USER_OPENPROSE_ROOT_PATH = "~/.agents/prose"`). A native root is detected by
-the presence of `prose.lock` or `.git`.
 
 The root layout is:
 
@@ -302,8 +269,7 @@ where standing goals keep their history.
 
 Contract Markdown is the human-facing language surface. A `*.prose.md` file has
 small YAML frontmatter for identity and Markdown `###` sections for contracts,
-runtime hints, shape, execution, memory, and responsibility semantics. The
-canonical spec is `skills/open-prose/contract-markdown.md`.
+runtime hints, shape, execution, memory, and responsibility semantics.
 
 ```markdown
 ---
@@ -324,36 +290,13 @@ kind: service
 - when sources are thin: broaden search terms
 ```
 
-**Frontmatter.** Every file declares identity with `name` and `kind`. A
-`kind: test` file also declares `subject:`. A `kind: responsibility` file
-**also carries a required `id:` frontmatter field** — and the source-compile
-*enforces* this (see audit note below). `id:` is a tooling-generated 16-byte
-UUIDv7-compatible value rendered as a **26-character uppercase Crockford
-base32** string (`isMarkdownResponsibilityId` in
-`tools/cli/src/prose/repository-ir.ts`: `markdownIdLength = 26`,
-`markdownIdByteLength = 16`, with the UUIDv7 version/variant nibbles checked).
-It is minted once and preserved across `name:` and filename renames. `name:`
-is the human-facing slug; `id:` is the durable identity used to key
-standing-goal state under `state/responsibilities/{id}/`, to fence decisions on
-contract revision, and as the composition referent. Authors do not hand-write
-`id:`; tooling manages it.
-
-> **Audit note — `id:` on responsibility files.** Both the spec
-> (`contract-markdown.md`) **and every bundled example** carry the required
-> `id:`. All eight responsibility files under
-> `skills/open-prose/examples/*/src/*.prose.md` (e.g.
-> `stargazer-outreach/src/high-intent-stargazer-outreach.prose.md` with
-> `id: 067NC4KG19TPD9V8D5N6PV3DDR`) declare a valid 26-char id. The compile
-> path enforces it three ways: a preflight check
-> (`validateResponsibilitySources` in `tools/cli/src/commands/compile.ts`)
-> emits a `missing_id` or `malformed_id` diagnostic and fails the compile
-> *before* harness forwarding; the IR validator
-> (`validateResponsibilities` in `repository-ir.ts`) rejects any
-> responsibility whose `id` is not a Crockford-base32 UUIDv7 Markdown id; and
-> a post-compile source-contract check
-> (`validateCompiledResponsibilitySourceContracts`) re-confirms each emitted
-> `id` matches the source frontmatter. The required-`id:` claim is **true and
-> exercised** in the current code — there is no drift here.
+A `kind: responsibility` file also carries a required `id:` frontmatter
+field: a tooling-generated, UUIDv7-compatible identifier minted once by
+`prose` and preserved across `name:` and filename renames. `name:` is the
+human-facing slug; `id:` is the durable identity used to key standing-goal
+state under `state/responsibilities/{id}/`, to fence decisions on contract
+revision, and as the composition referent. Authors do not hand-write `id:`;
+tooling manages it.
 
 The six current authored kinds are:
 
@@ -366,47 +309,29 @@ The six current authored kinds are:
 | `responsibility` | No | Standing goal compiled into repository IR |
 | `gateway` | No | Ingress source compiled into trigger registrations |
 
-The `###` sections recognized by `contract-markdown.md`, case-insensitively,
-are:
+Canonical sections include:
 
 | Section | Applies to | Meaning |
 | --- | --- | --- |
-| `### Description` | system/service/test/pattern | Human summary; preserved for readers, not a contract |
+| `### Description` | service/system/test/pattern | Human summary; preserved for readers, not a contract |
 | `### Services` | system | Services, systems, or pattern instances to wire |
-| `### Requires` | system/service/test/pattern slots; `responsibility` for a pinned composition reference | Inputs or dependencies the caller/container must provide |
-| `### Ensures` | system/service/pattern | Outputs or postconditions |
-| `### Errors` | system/service | Declared failure modes |
-| `### Invariants` | system/service/pattern | Properties that hold regardless of outcome |
-| `### Strategies` | system/service/test | Judgment rules and edge-case guidance |
-| `### Environment` | system/service | Required runtime variables, checked by name only |
-| `### Runtime` | system/service | Execution settings; `persist: project\|user` gates the durable-state surface and the `### Memory` contract; `model` selects the model |
+| `### Requires` | service/system/test/pattern slots; `responsibility` for a pinned composition reference | Inputs or dependencies the caller/container must provide; on a `kind: responsibility`, a reserved `responsibility` typed-input pins an upstream id-or-path + contract revision + acceptable signer set (kernel-verifiable, not a Forme edge) |
+| `### Ensures` | service/system/pattern | Outputs or postconditions |
+| `### Errors` | service/system | Declared failure modes |
+| `### Invariants` | service/system/pattern | Properties that hold regardless of outcome |
+| `### Strategies` | service/system/test | Judgment rules and edge-case guidance |
+| `### Environment` | service/system | Required runtime variables, checked by name only |
+| `### Skills` | service/system | Agent harness skills the component requires, declared as `namespace:name`; resolved fail-closed against `./skills/`, `~/.claude/skills/`, `~/.codex/skills/`, `~/.agents/skills/` |
+| `### Tools` | service/system/responsibility | Host tools (`cli:<name>`, `mcp:<name>`) the component requires the host to provide, declared by name only; **required on `kind: responsibility` even when `(none)`** |
+| `### Runtime` | service/system | Execution settings; `persist: project\|user` gates the durable-state surface and the `### Memory` contract (not advisory); `model` selects the model |
 | `### Memory` | service | Declared durable reads/writes; only meaningful when `### Runtime` sets `persist: project` or `persist: user` |
-| `### Skills` | system/service | Agent harness skills the component requires the host to provide, declared by `namespace:name` |
-| `### Tools` | system/service/responsibility | Host tools (`cli:<name>`, `mcp:<name>`) the component requires the host to provide, declared by name only |
 | `### Shape` | service | Capability boundaries: self, delegates, prohibited work |
 | `### Wiring` | system | Explicit binding when auto-wiring should be pinned |
-| `### Execution` | system/service | ProseScript choreography |
+| `### Execution` | service/system | ProseScript choreography |
 | `### Fixtures` / `### Expects` / `### Expects Not` | test | Test data and assertions |
 | `### Slots` / `### Config` / `### Delegation` | pattern | Pattern interface and algorithm |
 | `### Goal` / `### Continuity` / `### Criteria` / `### Constraints` / `### Tools` / `### Fulfillment` | responsibility | Standing-goal contract |
 | `### Schedule` / `### Receives` / `### Emits` / `### Payload` | gateway | Time/event ingress declarations |
-
-Unknown `###` sections are preserved as documentation; they are not contract
-sections.
-
-> **Audit note — `### Tools` is required on responsibilities; `### Skills` is
-> a real section.** The compile preflight
-> (`validateResponsibilitySources` in `compile.ts`) emits a
-> `missing_required_section` diagnostic and fails the compile if a
-> `kind: responsibility` file has no `### Tools` section — an empty
-> `### Tools` with `(none)` satisfies it, an absent one does not. Every
-> bundled responsibility example includes an explicit `### Tools` section for
-> this reason. Separately, `### Skills` is a current canonical section
-> (declaring harness skills in `namespace:name` form, resolved fail-closed
-> against `./skills/`, `~/.claude/skills/`, `~/.codex/skills/`,
-> `~/.agents/skills/`); the deterministic preflight
-> (`preflightDeclaredSkillsInRoot`) emits `skill_unresolved`. `### Skills`
-> and `### Description` are part of the live language surface.
 
 Header hierarchy is part of the language:
 
@@ -415,12 +340,6 @@ Header hierarchy is part of the language:
 | `#` | Optional human title |
 | `##` | Inline service boundary inside multi-service files |
 | `###` | Section inside the current service/system/test/pattern/responsibility |
-| `####`+ | Free-form nested documentation inside a section |
-
-The source-compiler's `parseMarkdownSections` and `splitMarkdownComponents`
-implement this hierarchy directly (`repository-source-compiler.ts`,
-`compile.ts`), including fenced-code awareness so a `###` inside a code fence
-is not mistaken for a section.
 
 Systems compose work four ways:
 
@@ -441,25 +360,10 @@ Pattern instances are current syntax:
     max_rounds: 3
 ```
 
-> **Audit note — pattern-instance lowering in the deterministic compiler.**
-> The deterministic source-compiler's `compileFormeManifest`
-> (`repository-source-compiler.ts`) wires systems by parsing `### Services`
-> into plain service names and resolving each against discovered source by
-> `name`. Structured pattern-instance YAML (`pattern:`/`with:`/`config:`) is
-> *authored* syntax that the language recognizes and the pinned ProseScript
-> compiler is meant to expand, but the deterministic TypeScript fallback
-> compiler resolves only plain service-name entries and subsystem-by-name
-> entries; a pattern-instance entry that does not name a resolvable source
-> emits a `warning` diagnostic. Pattern instantiation is therefore fully
-> *specified* and exercised in smoke fixtures
-> (`tests/open-prose/smoke/09-local-pattern.prose.md`), but the deterministic
-> compiler's Forme lowering does not itself expand patterns into graph nodes.
-
 ### Forme
 
 Forme is OpenProse's semantic dependency-injection container. Traditional
-containers wire by type. Forme wires by reading contracts. The doctrine is
-`skills/open-prose/forme.md`.
+containers wire by type. Forme wires by reading contracts.
 
 For a `kind: system`, Forme:
 
@@ -478,23 +382,12 @@ and also expresses the wiring operation as a standard-library contract in
 `packages/std/ops/wire.prose.md`. That is an important architectural point:
 OpenProse uses Prose to describe parts of its own toolchain.
 
-The deterministic source-compiler emits a structured Forme manifest per system
-as `formeManifests[]` in repository IR: graph nodes with workspace paths,
-input/output bindings, a topological `executionOrder`, declared `environment`
-variables, and declared `tools`, each with `requiredBy` node lists
-(`compileFormeManifest`, `wireFormeInputs`, `executionOrderFor` in
-`repository-source-compiler.ts`). Input wiring matches a node's `### Requires`
-field names against upstream `### Ensures` outputs; an unmatched field becomes
-a `caller` input. This is name-equality wiring; the richer semantic-equivalence
-and shape-hint matching in the Forme doctrine is the pinned ProseScript
-compiler's responsibility.
-
 ### Prose VM
 
-The Prose VM is the execution semantics (`skills/open-prose/prose.md`). When an
-agent runs OpenProse, it is not merely describing a VM. It performs the VM by
-mapping the spec to host tools, spawning real sessions, writing real artifacts,
-and evaluating real contracts.
+The Prose VM is the execution semantics. When an agent runs OpenProse, it is
+not merely describing a VM. It performs the VM by mapping the spec to host
+tools, spawning real sessions, writing real artifacts, and evaluating real
+contracts.
 
 For a single service:
 
@@ -537,24 +430,15 @@ The separation matters:
 | `workspace/` | Private scratch and outputs per service |
 | `bindings/` | Public interface visible to downstream services |
 
-OpenProse specifies four state backends, each with a doc under
-`skills/open-prose/state/`: filesystem (`filesystem.md`, the default and
-normative reference), in-context (`in-context.md`, for small ephemeral runs),
-SQLite (`sqlite.md`), and PostgreSQL (`postgres.md`). SQLite and PostgreSQL are
-documented as experimental durable alternatives that keep the run envelope but
-move events and data-plane bindings into database records.
-
-> **Audit note — the VM is host-embodied.** The Prose VM is not a TypeScript
-> implementation in this repository. Execution is performed by the selected
-> agent harness embodying the semantics in `prose.md`. The CLI forwards
-> `prose run`/`prose test` to the harness; it does not itself spawn service
-> sessions or copy bindings. The deterministic code's role is compile, IR
-> validation, status reading, and serve dispatch — see the CLI subsection.
+OpenProse also specifies in-context, SQLite, and PostgreSQL state backends.
+Filesystem is the default and normative reference. In-context is for small
+ephemeral runs. SQLite and PostgreSQL are experimental durable alternatives
+that keep the run envelope but move events and data-plane bindings into
+database records.
 
 ### ProseScript
 
-Contract Markdown is declarative. ProseScript is the pinning layer
-(`skills/open-prose/prosescript.md`).
+Contract Markdown is declarative. ProseScript is the pinning layer.
 
 Use ProseScript when order, loops, branching, retries, parallelism, or exact
 call choreography matters:
@@ -577,15 +461,12 @@ ProseScript supports `call`, `parallel`, `for`, `loop`, `if`, `choice`,
 `try/catch/finally`, `throw`, `agent`, `session`, `resume`, blocks, and
 pipeline-style operations. In current Contract Markdown, public interfaces
 belong to `### Requires`, `### Ensures`, and `### Services`; embedded
-ProseScript should not redeclare them. When `### Execution` is present it is a
-Level 3 pin: Forme still validates contracts and extracts the call graph, but
-the VM follows the written order.
+ProseScript should not redeclare them.
 
 ### Responsibility Runtime
 
 Responsibility Runtime is the continuity layer for repositories that need
-standing goals to remain true over time
-(`skills/open-prose/responsibility-runtime.md`).
+standing goals to remain true over time.
 
 The stack is:
 
@@ -602,8 +483,6 @@ A `kind: responsibility` file is semantic and normative. It defines:
 - `### Continuity`: how time qualifies the obligation.
 - `### Criteria`: what satisfactory fulfillment means.
 - `### Constraints`: what must remain bounded or prohibited.
-- `### Tools`: declared host capabilities (`cli:`/`mcp:`) — a **required**
-  section, even when `(none)`.
 - `### Fulfillment`: optional hint naming a system or service.
 
 A `kind: gateway` file describes ingress when inference would be unsafe:
@@ -621,24 +500,15 @@ The Reactor loop is:
 4. Unhealthy status produces deduped pressure.
 5. Pressure launches an ordinary fulfillment, retry, or escalation activation.
 
-Current live serve support includes local cron and HTTP adapters
-(`tools/cli/src/prose/repository-serve-reactor-adapters.ts`,
-`repository-cron.ts`, `repository-serve-daemon.ts`). Queues, file watches,
-provider subscription setup, webhook authentication, and automatic manifest
-reload are explicitly later phases (stated in `responsibility-runtime.md`).
-Judge activations use the bundled
-`skills/open-prose/runtime/judge-responsibility.prose.md` service. Pressure
-records (`responsibility-pressure.ts`, `responsibility-pressure-dispatch.ts`)
-are deduped by responsibility fingerprint, status, source-status timestamp,
-activation class, and activation id.
+Current live serve support includes local cron and HTTP adapters. Queues, file
+watches, provider subscription setup, webhook authentication, and automatic
+manifest reload are explicitly later phases.
 
 ### Repository IR v0
 
 `prose compile` lowers source under an OpenProse root into generated repository
 IR. Markdown remains the durable authoring surface; IR is disposable compiled
-intent consumed by deterministic infrastructure. The IR v0 contract is
-`skills/open-prose/compiler/ir-v0.md`; the TypeScript types and validator are
-`tools/cli/src/prose/repository-ir.ts`.
+intent consumed by deterministic infrastructure.
 
 The v0 top-level shape is:
 
@@ -662,50 +532,40 @@ The canonical output files are:
 | `dist/manifest.next.json` | Fresh compile output |
 | `dist/manifest.active.json` | Manifest consumed by `prose serve` |
 
-These are the `NEXT_REPOSITORY_IR_PATH` and `ACTIVE_REPOSITORY_IR_PATH`
-constants in `repository-ir.ts`. Promotion from next to active is explicit
-(by convention `cp dist/manifest.next.json dist/manifest.active.json`).
+Promotion from next to active is explicit.
 
 IR records include:
 
 | Record | Meaning |
 | --- | --- |
-| `sources[]` | Discovered source files: root-relative `path`, `kind`, optional `name` |
-| `responsibilities[]` | `id`, `sourcePath`, `goal`, `continuity[]`, `criteria[]`, `constraints[]`, `tools[]`, optional `fulfillment` |
-| `triggers[]` | Concrete `cron`, `http`, or `manual` trigger registrations keyed to a responsibility id |
-| `activations[]` | `judge`, `fulfillment`, `retry`, or `escalation` intent |
+| `sources[]` | Discovered source files with root-relative paths |
+| `responsibilities[]` | Standing-goal contracts preserved as structured data |
+| `triggers[]` | Concrete cron, HTTP, or manual trigger registrations |
+| `activations[]` | Judge, fulfillment, retry, or escalation intent |
 | `formeManifests[]` | Structured runtime wiring for systems |
-| `diagnostics[]` | `info`/`warning` messages with optional source paths (a written manifest may not contain `error`-severity diagnostics) |
+| `diagnostics[]` | Info/warning/error messages with optional source paths |
 
-> **Audit note — `prose compile` runs a deterministic compiler too.** The spec
-> describes `prose compile` as forwarding to a pinned ProseScript compiler
-> (`skills/open-prose/compiler/index.prose.md`) and then deterministically
-> *validating* the model-produced JSON. That is accurate but incomplete for
-> the current code. `runCompileCommand` (`tools/cli/src/commands/compile.ts`)
-> *also* ships a complete deterministic TypeScript source-compiler,
-> `compileRepositorySource` (`repository-source-compiler.ts`), which discovers
-> every `.prose.md` under the source root and emits a full valid
-> `manifest.next.json` — responsibilities, triggers, activations, and Forme
-> manifests — purely from the Markdown. The CLI uses it as a fallback:
-> `writeSourceCompiledRepositoryIrIfMissing` writes the deterministic IR when
-> the harness produced none, and `shouldAcceptNonzeroCompiledManifest`
-> accepts a valid deterministic IR even when the harness exits non-zero. So
-> the current `prose compile` has *two* compilers — the model-run ProseScript
-> program and a deterministic TypeScript one — and the deterministic one is
-> exercised by the compiler fixtures (`tests/open-prose/compiler/expected/`).
-> The Ideal commits the compiler to be a model-run Prose service (Tenet 2);
-> the current code has a deterministic fallback that does the same lowering.
+The canonical compiler is a pinned ProseScript service at
+`skills/open-prose/compiler/index.prose.md` that the harness runs. The CLI also
+ships a deterministic TypeScript source-compiler
+(`tools/cli/src/prose/repository-source-compiler.ts`) used as a validating
+fallback when the harness produces no manifest. The Ideal commits the compiler
+to be a model-run Prose service (Tenet 2); the current code carries both, with
+the deterministic one performing real lowering — fulfillment inference and
+Forme-manifest construction — as well as validation. Resolving whether the
+deterministic compiler should be reframed as *only* a structural validator or
+acknowledged as a permitted, semantics-free mechanical lowering is open
+roadmap work (see Part III §3).
 
-Important compiler doctrine (from `responsibility-runtime.md` and `ir-v0.md`):
+Important compiler doctrine:
 
 - Discover every `.prose.md` under the source root.
-- Infer only when the source graph is clear; the deterministic compiler infers
-  fulfillment when exactly one system (or, absent systems, one service) is
-  present, and warns when multiple systems are plausible.
+- Infer only when the source graph is clear.
 - Warn instead of guessing timing, fulfillment, or wiring.
 - Do not invent provider auth, queue names, routes, payload schemas, or
   subscription setup.
 - Write `manifest.next.json` only after the IR shape is valid.
+- Stop after writing; the CLI performs deterministic validation.
 
 Repository IR v0 is **frozen and source-derived**: it is a function of the
 `*.prose.md` source and nothing else. The Reactor harness's policy artifact,
@@ -716,9 +576,8 @@ Part III §3 and [02-ReactorHarness.md](./02-ReactorHarness.md)
 
 ### CLI
 
-The CLI package is `@openprose/prose-cli`, version `0.14.0` at the audited
-state (`tools/cli/package.json`). It is an Oclif TypeScript package published
-as the `prose` binary.
+The CLI package is `@openprose/prose-cli`, currently version `0.14.0` in the
+repository. It is an Oclif TypeScript package published as the `prose` binary.
 
 Its two jobs are:
 
@@ -727,19 +586,17 @@ Its two jobs are:
 2. Host deterministic local runtime pieces for repository IR, status, and
    trigger serving.
 
-Current local deterministic commands (have a dedicated `Command` class in
-`tools/cli/src/commands/`):
+Current local deterministic commands:
 
 | Command | Role |
 | --- | --- |
 | `prose help` | Oclif help |
 | `prose doctor` | Inspect or install selected provider skill targets |
-| `prose compile` | Run the (preflight + harness + deterministic-fallback) compile, then validate generated IR |
+| `prose compile` | Forward compile to harness, then validate generated IR |
 | `prose status` | Read active IR and runtime receipts locally |
 | `prose serve` | Serve active IR with local cron and HTTP adapters |
 
-Current forwarded commands (defined as `ForwardCommandDefinition` entries in
-`commands/index.ts`):
+Current forwarded commands:
 
 | Command | Role |
 | --- | --- |
@@ -751,31 +608,19 @@ Current forwarded commands (defined as `ForwardCommandDefinition` entries in
 | `prose install` | Install and pin dependencies |
 | `prose examples` | List or run bundled examples |
 | `prose upgrade` | Migrate legacy source/layout conventions |
-| `prose write` | Generate validated OpenProse source from rough English or pseudo-Prose |
-
-> **Audit note — `prose write` is a new command (v0.14.0).** `prose write`
-> and the `std/ops/prose-author` contract were added in `0.14.0` (see
-> `CHANGELOG.md`). In-harness it is interactive by default and may ask
-> targeted `ask_user` questions after a read-only landscape scan and
-> shape/root inference; the shell CLI wrapper is non-interactive, forwards
-> argv/stdin with `interactive: false`, and returns `unresolved-intent`
-> rather than guessing. It is part of the current language tooling and is
-> absent from the Ideal section.
+| `prose write` | Generate validated OpenProse source from rough English or pseudo-Prose (backed by `std/ops/prose-author`) |
 
 Harness selection uses `--harness` or `PROSE_HARNESS`. The documented harnesses
-are `codex-sdk`, `claude-sdk`, and `mock`; `codex-sdk` is the default
-(`env.PROSE_HARNESS || "codex-sdk"` in `tools/cli/src/commands/base.ts`).
+are `codex-sdk`, `claude-sdk`, and `mock`; `codex-sdk` is the default.
 
 `prose serve` loads `dist/manifest.active.json`, validates it, registers local
-cron timers and HTTP routes, exposes `GET /_openprose/health`
-(`repository-serve-daemon.ts`), and dispatches accepted events into ordinary
-`prose run` activations. HTTP triggers return `202 Accepted` before
-long-running agent work completes.
+cron timers and HTTP routes, exposes `/_openprose/health`, and dispatches
+accepted events into ordinary `prose run` activations. HTTP triggers return
+`202 Accepted` before long-running agent work completes.
 
 ### Dependencies
 
-OpenProse dependencies are git-native and disk-only at runtime
-(`skills/open-prose/deps.md`).
+OpenProse dependencies are git-native and disk-only at runtime.
 
 Canonical dependency identifiers use explicit git hosts:
 
@@ -802,28 +647,22 @@ the user to run `prose install`.
 `packages/std/` is the standard library. It is not just helper text; it is a
 library of OpenProse contracts written in the language itself.
 
-| Category | Contents (audited file count) |
+| Category | Contents |
 | --- | --- |
-| `roles/` | 10 atomic role services: `classifier`, `critic`, `extractor`, `formatter`, `planner`, `researcher`, `router`, `summarizer`, `verifier`, `writer` |
-| `patterns/` | 19 reusable coordination patterns: `assumption-miner`, `blind-review`, `coherence-probe`, `contrastive-probe`, `dialectic`, `ensemble-synthesizer`, `fallback-chain`, `fan-out`, `guard`, `map-reduce`, `oversight`, `pipeline`, `proposer-adversary`, `race`, `ratchet`, `refine`, `retry-with-learning`, `stochastic-probe`, `worker-critic` |
-| `ops/` | Operational systems: `diagnose`, `lint`, `preflight`, `profiler`, `status`, `wire`, plus `prose-author` (the `prose write` backing contract, with its test suite) |
+| `roles/` | Atomic role services: classifier, critic, verifier, extractor, summarizer, formatter, researcher, writer, planner, router |
+| `patterns/` | 19 reusable coordination patterns: worker-critic, pipeline, map-reduce, fan-out, race, guard, fallback-chain, retry-with-learning, dialectic, oversight, ensemble-synthesizer, proposer-adversary, assumption-miner, blind-review, coherence-probe, contrastive-probe, ratchet, refine, stochastic-probe |
+| `ops/` | Operational systems: lint, preflight, wire, status, diagnose, profiler, plus `prose-author` (the backing contract for `prose write`) |
 | `delivery/` | Human gate, email, Slack, webhook, HTML rendering, and file writing |
 | `memory/` | Project and user memory services |
-| `evals/` | `contract-grader`, `cross-run-differ`, `eval-calibrator`, `inspector`, `platform-improver`, `prose-contributor`, `regression-tracker`, `system-improver` |
-
-> **Audit note — std additions since the prior spec.** The prior Part II
-> listed `ops/` as `lint, preflight, wire, status, diagnose, profiler` and
-> `evals/` without `prose-contributor`. The current `ops/` also contains
-> `prose-author.prose.md` (the backing contract for `prose write`, shipped
-> with eight `*.test.prose.md` files), and the current `evals/` also contains
-> `prose-contributor.prose.md`. The pattern and role inventories above are
-> the audited file listing.
+| `evals/` | Inspector, contract grader, regression tracker, cross-run differ, calibrator, system improver, platform improver, prose-contributor |
 
 The `roles` README describes roles as the atoms. Patterns are the molecules:
 they define slots, config, invariants, and delegation algorithms that systems
-instantiate. The eval and ops libraries make the feedback loop explicit: a run
-can be inspected, graded against contracts, compared across runs, diagnosed,
-profiled, and used to propose source or platform improvements.
+instantiate.
+
+The eval and ops libraries make the feedback loop explicit. A run can be
+inspected, graded against contracts, compared across runs, diagnosed, profiled,
+and used to propose source or platform improvements.
 
 ### Company-As-Prose Package
 
@@ -831,24 +670,40 @@ profiled, and used to propose source or platform improvements.
 `std`, not inside it.
 
 `std` is use-case agnostic. `co` is an opinionated starter kit for operating a
-company as an OpenProse-native repository. The current public contracts are:
+company as an OpenProse-native repository. Current public contracts include:
 
 | Contract | Role |
 | --- | --- |
 | `co/services/agent-readiness` | Probe a company's website for agent-discoverability and plain-HTML readiness |
 | `co/systems/company-repo-checker` | Verify a company-as-prose repo matches shared layout and contract expectations |
-| `co/evals/agent-readiness`, `co/evals/company-repo-checker` | Evaluations for the package services/systems |
+| `co/evals/*` | Evaluations for the package services/systems |
 
 The package explicitly avoids OpenProse, Inc. private business logic. It is
-generic company-operations scaffolding. As audited, `co/` contains exactly one
-service, one system, and two eval contracts — a small, focused package.
+generic company-operations scaffolding.
 
 ### Examples
 
-The examples under `skills/open-prose/examples/` divide into two groups.
+The examples under `skills/open-prose/examples/` are OpenProse Native
+Repositories. Each one uses:
 
-**Native OpenProse repositories** — full responsibility-runtime examples, each
-with `src/`, `dist/`, `runs/`, `state/`, `deps/`, and `prose.lock`:
+```text
+src/      authored responsibility, gateway, system, and service contracts
+dist/     compiled intent
+runs/     bounded activation receipts
+state/    durable responsibility/application state
+deps/     installed dependencies
+prose.lock
+```
+
+The shared lifecycle is:
+
+```bash
+prose compile
+cp dist/manifest.next.json dist/manifest.active.json
+prose serve
+```
+
+Current example repositories:
 
 | Example | Standing goal |
 | --- | --- |
@@ -861,28 +716,20 @@ with `src/`, `dist/`, `runs/`, `state/`, `deps/`, and `prose.lock`:
 | `content-performance-loop` | Keep content performance learnings flowing into next editorial actions |
 | `compliance-evidence-tracker` | Keep audit evidence fresh, reviewed, and gap-aware |
 
-Each of these eight repositories follows the shared lifecycle:
+The examples repeatedly demonstrate the current architecture: a responsibility
+defines the standing goal, a gateway provides time/event ingress, a fulfillment
+system composes services, and project-scoped memory updates durable ledgers,
+registers, or histories.
 
-```bash
-prose compile
-cp dist/manifest.next.json dist/manifest.active.json
-prose serve
-```
-
-and each demonstrates the current architecture: a responsibility defines the
-standing goal, a gateway provides time/event ingress, a fulfillment system
-composes services, and project-scoped memory updates durable ledgers. All
-eight responsibility source files carry a valid `id:` frontmatter field.
-
-**Minimal feature demos** — smaller examples that each isolate one language
-feature:
+The examples directory also contains minimal feature demos that each isolate
+one language feature:
 
 | Example | Demonstrates |
 | --- | --- |
 | `declared-skills` | `### Skills` resolution and the `skill_unresolved` diagnostic |
 | `declared-tools` | `### Tools` resolution and the `tool_unresolved` diagnostic |
-| `auto-pocock` | A non-interactive 12-service system adapting an external skill workflow |
-| `flat-tokens` | A Reactor-runtime (`packages/reactor`) token-accounting demo — Reactor-harness material, not language material; see [02-ReactorHarness.md](./02-ReactorHarness.md) |
+| `auto-pocock` | A non-interactive multi-service system adapting an external skill workflow |
+| `flat-tokens` | A Reactor-runtime token-accounting demo (Reactor-harness material, not language material) |
 
 ### Tests And Release
 
@@ -890,25 +737,19 @@ The current repository has several layers of validation:
 
 | Layer | Coverage |
 | --- | --- |
-| Contract smoke fixtures | `tests/open-prose/smoke/` — 10 `*.prose.md` fixtures: single service, caller input, auto-wiring, inline services, explicit wiring, ProseScript execution, errors/strategies, `kind: test`, local pattern instantiation |
-| Compiler fixtures | `tests/open-prose/compiler/` — expected repository IR (`expected/empty`, `expected/stargazer`, `expected/ambiguous-fulfillment`) and invalid IR shapes (`invalid/malformed-forme`, `invalid/malformed-responsibility`, `invalid/missing-version`) plus source fixtures including a `missing-criteria` invalid responsibility |
-| CLI tests | `tools/cli/tests/` — 26 `*.test.ts` files across `cli/`, `prose/`, `harnesses/`, `skills/`, `tools/`, `install/`, `package/` |
-| IR validation tests | Source paths, cron/http/manual triggers, judge-activation rules, fulfillment/Forme consistency, diagnostics — exercised against `repository-ir.ts` |
-| Responsibility tests | Status records, pressure records, dedupe, freshness, activation routing |
-| CI workflows | `.github/workflows/` — CLI release checks, real harness smoke, skill install smoke, OpenProse smoke, plugin manifest validation, release publishing |
+| Contract smoke fixtures | Single service, caller input, auto-wiring, inline services, explicit wiring, ProseScript execution, errors/strategies, tests, local pattern instantiation |
+| Compiler fixtures | Expected repository IR shapes for empty source, stargazer responsibility runtime, ambiguous fulfillment, and invalid responsibility |
+| CLI tests | Command validation, forwarding, harnesses, skill bootstrap, compile validation, root resolution, status, serve dispatch |
+| IR validation tests | Source paths, cron/http/manual triggers, judge activation rules, fulfillment/Forme consistency, diagnostics |
+| Responsibility tests | Status records, pressure records, dedupe, freshness, and activation routing |
+| CI workflows | CLI release checks, real harness smoke, skill install smoke, OpenProse smoke, plugin manifest validation, release publishing |
 
-The release process uses one release train. Skill metadata, plugin metadata,
-CLI npm package, package lock, and tarball installer share the same `X.Y.Z`
-version (`.version-bump.json`, `.plugin-meta.json`). The protected release
-workflow verifies CLI/package/plugin surfaces, publishes `@openprose/prose-cli`,
-and creates a GitHub Release.
+The release process uses one release train. Skill metadata, plugin metadata, CLI
+npm package, package lock, and tarball installer share the same `X.Y.Z`
+version. The protected release workflow verifies CLI/package/plugin surfaces,
+publishes `@openprose/prose-cli`, and creates a GitHub Release.
 
 ### Mental Model
-
-> **Audit note.** This mental model is reported as the *current taught* model.
-> The Ideal (Part I) and the Roadmap (Part III §1) call for inverting it so
-> the responsibility, not the system, is the headline. It is preserved here as
-> an accurate record of what the skill currently teaches.
 
 OpenProse is best understood as typed, inspectable agent software:
 
@@ -938,7 +779,7 @@ OpenProse is best understood as typed, inspectable agent software:
 | Pressure | Runtime feedback created when a responsibility is unhealthy |
 | Prose Complete | Host capability threshold for running OpenProse |
 | Prose VM | Execution semantics embodied by the agent host |
-| ProseScript | Imperative choreography language inside `### Execution` and pattern `### Delegation` |
+| ProseScript | Imperative choreography language inside `### Execution` and `### Delegation` |
 | Repository IR | Generated JSON manifest consumed by deterministic runtime infrastructure |
 | Responsibility | Standing goal that must remain true over time |
 | Reactor | Evented reconciliation model for responsibilities |
@@ -947,7 +788,7 @@ OpenProse is best understood as typed, inspectable agent software:
 
 ---
 
-## Part III — Roadmap (the Delta)
+## Part III — What Is Next
 
 The gap between Part I and Part II is **almost entirely doctrine, not syntax.**
 The finding across this doc, the Harness doc, and the Pattern doc is
@@ -955,7 +796,7 @@ that the ideal language needs **no new `*.prose.md` syntax** — the six kinds,
 the canonical sections, and the header hierarchy already express everything,
 with one bounded exception: composition pins a reserved `responsibility`
 typed-input (the same mechanism as `run`/`run[]`), so the supply-chain edge is
-kernel-verifiable rather than prose-asserted (§3).
+kernel-verifiable rather than prose-asserted (Part III §3).
 What must change is which model the skill *teaches as default*, and how thinly
 two sections are currently documented relative to the load they bear.
 
@@ -1030,26 +871,6 @@ may do without changing the language:
   Forme wiring edge. It is source-derived authoring surface, not
   policy-registry/sibling state.
 
-### 4. Converge the two compilers, or document the split deliberately
-
-Part II's audit found that `prose compile` currently ships **two** compilers:
-the pinned model-run ProseScript program
-(`skills/open-prose/compiler/index.prose.md`) and a deterministic TypeScript
-source-compiler (`tools/cli/src/prose/repository-source-compiler.ts`) used as a
-fallback. The Ideal commits the compiler to be a Prose service the model runs
-(Tenet 2: intelligence in the model, deterministic code only validates). The
-deterministic fallback does real lowering — including fulfillment inference and
-Forme-manifest construction — which is more than validation.
-
-The roadmap item is a deliberate decision, not a silent drift: either (a) the
-deterministic compiler is reframed as *only* a structural validator and the
-model-run compiler becomes the sole lowering path, or (b) the deterministic
-compiler is acknowledged in the Ideal as a permitted, semantics-free
-mechanical lowering (name-equality wiring, no judgment) that coexists with the
-model-run compiler for ambiguous graphs. This doc's Ideal currently assumes
-(a); the code currently does (b). Resolving which the language commits to is
-owed work.
-
 ### Definition of done for the language layer
 
 - The mental model and runnable framing are responsibility-first; the
@@ -1059,4 +880,3 @@ owed work.
   `### Criteria` decidability with the undecidable-`blocked` doctrine.
 - No new syntax is introduced; every change is doctrine, docs, or routing.
 - The IR-vs-sibling-state boundary is stated and cross-linked, not implied.
-- The two-compiler relationship is resolved into a single committed doctrine.
